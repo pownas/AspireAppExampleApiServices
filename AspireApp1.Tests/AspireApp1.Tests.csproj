@@ -1,9 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
@@ -14,9 +11,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.Testing" Version="13.2.4" />
-    <PackageReference Include="MessagePack" Version="3.1.7" />
-    <PackageReference Include="MSTest" Version="3.10.2" />
+    <PackageReference Include="Aspire.Hosting.Testing" />
+    <PackageReference Include="MessagePack" />
+    <PackageReference Include="MSTest" />
   </ItemGroup>
 
   <ItemGroup>

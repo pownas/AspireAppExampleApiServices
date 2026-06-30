@@ -1,0 +1,23 @@
+﻿<Project>
+  <PropertyGroup>
+    <!-- Central packages management, info: https://learn.microsoft.com/en-us/nuget/consume-packages/central-package-management -->
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Make the transitive dependencies also locked to the version you specify here -->
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
+    <PackageVersion Include="MessagePack" Version="3.1.7" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.2.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.2.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.2.4" />
+    <PackageVersion Include="MessagePack" Version="3.1.7" />
+    <PackageVersion Include="MSTest" Version="3.10.2" />
+  </ItemGroup>
+</Project>
