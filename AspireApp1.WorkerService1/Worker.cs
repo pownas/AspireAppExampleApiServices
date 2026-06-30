@@ -1,4 +1,4 @@
-namespace AspireApp1.WorkerService1;
+﻿namespace AspireApp1.WorkerService1;
 
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
@@ -10,7 +10,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
             {
                 logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
             }
-            await Task.Delay(1000, stoppingToken);
+            await Task.Delay(10_000, stoppingToken);
         }
     }
 }

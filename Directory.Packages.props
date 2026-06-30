@@ -17,7 +17,6 @@
     <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
     <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
     <PackageVersion Include="Aspire.Hosting.Testing" Version="13.2.4" />
-    <PackageVersion Include="MessagePack" Version="3.1.7" />
     <PackageVersion Include="MSTest" Version="3.10.2" />
   </ItemGroup>
 </Project>
