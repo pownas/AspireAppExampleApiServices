@@ -1,7 +1,36 @@
 {
   "Version": 1,
   "WorkspaceRootPath": "C:\\GitHub\\AspireApp1\\",
-  "Documents": [],
+  "Documents": [
+    {
+      "AbsoluteMoniker": "D:0:0:{9DC16544-8A6B-6A1E-1F6B-3F7327D3F8C4}|AspireApp1.AppHost\\AspireApp1.AppHost.csproj|c:\\github\\aspireapp1\\aspireapp1.apphost\\apphost.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{9DC16544-8A6B-6A1E-1F6B-3F7327D3F8C4}|AspireApp1.AppHost\\AspireApp1.AppHost.csproj|solutionrelative:aspireapp1.apphost\\apphost.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{9DC16544-8A6B-6A1E-1F6B-3F7327D3F8C4}|AspireApp1.AppHost\\AspireApp1.AppHost.csproj|c:\\github\\aspireapp1\\aspireapp1.apphost\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{9DC16544-8A6B-6A1E-1F6B-3F7327D3F8C4}|AspireApp1.AppHost\\AspireApp1.AppHost.csproj|solutionrelative:aspireapp1.apphost\\appsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{9DC16544-8A6B-6A1E-1F6B-3F7327D3F8C4}|AspireApp1.AppHost\\AspireApp1.AppHost.csproj|c:\\github\\aspireapp1\\aspireapp1.apphost\\appsettings.development.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{9DC16544-8A6B-6A1E-1F6B-3F7327D3F8C4}|AspireApp1.AppHost\\AspireApp1.AppHost.csproj|solutionrelative:aspireapp1.apphost\\appsettings.development.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{9DC16544-8A6B-6A1E-1F6B-3F7327D3F8C4}|AspireApp1.AppHost\\AspireApp1.AppHost.csproj|c:\\github\\aspireapp1\\aspireapp1.apphost\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{9DC16544-8A6B-6A1E-1F6B-3F7327D3F8C4}|AspireApp1.AppHost\\AspireApp1.AppHost.csproj|solutionrelative:aspireapp1.apphost\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{DEBA5DBE-4B8E-9535-E92B-CFEF82303E91}|.SolutionItems.csproj|c:\\github\\aspireapp1\\.solutionitems.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{DEBA5DBE-4B8E-9535-E92B-CFEF82303E91}|.SolutionItems.csproj|solutionrelative:.solutionitems.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{9DC16544-8A6B-6A1E-1F6B-3F7327D3F8C4}|AspireApp1.AppHost\\AspireApp1.AppHost.csproj|c:\\github\\aspireapp1\\aspireapp1.apphost\\aspireapp1.apphost.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{9DC16544-8A6B-6A1E-1F6B-3F7327D3F8C4}|AspireApp1.AppHost\\AspireApp1.AppHost.csproj|solutionrelative:aspireapp1.apphost\\aspireapp1.apphost.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    },
+    {
+      "AbsoluteMoniker": "D:0:0:{2047DFA8-A1E7-E01D-D2A2-7F4257468FF0}|AspireApp1.ApiService\\AspireApp1.ApiService.csproj|c:\\github\\aspireapp1\\aspireapp1.apiservice\\aspireapp1.apiservice.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{2047DFA8-A1E7-E01D-D2A2-7F4257468FF0}|AspireApp1.ApiService\\AspireApp1.ApiService.csproj|solutionrelative:aspireapp1.apiservice\\aspireapp1.apiservice.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
+    }
+  ],
   "DocumentGroupContainers": [
     {
       "Orientation": 0,
@@ -9,11 +38,102 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": -1,
+          "SelectedChildIndex": 5,
           "Children": [
             {
               "$type": "Bookmark",
               "Name": "ST:0:0:{0174dea2-fdbe-4ef1-8f99-c0beae78880f}"
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 4,
+              "Title": ".SolutionItems",
+              "DocumentMoniker": "C:\\GitHub\\AspireApp1\\.SolutionItems.csproj",
+              "RelativeDocumentMoniker": ".SolutionItems.csproj",
+              "ToolTip": "C:\\GitHub\\AspireApp1\\.SolutionItems.csproj",
+              "RelativeToolTip": ".SolutionItems.csproj",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAABKAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2026-06-30T20:10:03.357Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 3,
+              "Title": "launchSettings.json",
+              "DocumentMoniker": "C:\\GitHub\\AspireApp1\\AspireApp1.AppHost\\Properties\\launchSettings.json",
+              "RelativeDocumentMoniker": "AspireApp1.AppHost\\Properties\\launchSettings.json",
+              "ToolTip": "C:\\GitHub\\AspireApp1\\AspireApp1.AppHost\\Properties\\launchSettings.json",
+              "RelativeToolTip": "AspireApp1.AppHost\\Properties\\launchSettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABQAAABAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-06-30T20:09:42.415Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 2,
+              "Title": "appsettings.Development.json",
+              "DocumentMoniker": "C:\\GitHub\\AspireApp1\\AspireApp1.AppHost\\appsettings.Development.json",
+              "RelativeDocumentMoniker": "AspireApp1.AppHost\\appsettings.Development.json",
+              "ToolTip": "C:\\GitHub\\AspireApp1\\AspireApp1.AppHost\\appsettings.Development.json",
+              "RelativeToolTip": "AspireApp1.AppHost\\appsettings.Development.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-06-30T20:09:35.612Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "appsettings.json",
+              "DocumentMoniker": "C:\\GitHub\\AspireApp1\\AspireApp1.AppHost\\appsettings.json",
+              "RelativeDocumentMoniker": "AspireApp1.AppHost\\appsettings.json",
+              "ToolTip": "C:\\GitHub\\AspireApp1\\AspireApp1.AppHost\\appsettings.json",
+              "RelativeToolTip": "AspireApp1.AppHost\\appsettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-06-30T20:09:33.966Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": "AppHost.cs",
+              "DocumentMoniker": "C:\\GitHub\\AspireApp1\\AspireApp1.AppHost\\AppHost.cs",
+              "RelativeDocumentMoniker": "AspireApp1.AppHost\\AppHost.cs",
+              "ToolTip": "C:\\GitHub\\AspireApp1\\AspireApp1.AppHost\\AppHost.cs",
+              "RelativeToolTip": "AspireApp1.AppHost\\AppHost.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-06-30T20:07:15.764Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 6,
+              "Title": "AspireApp1.ApiService",
+              "DocumentMoniker": "C:\\GitHub\\AspireApp1\\AspireApp1.ApiService\\AspireApp1.ApiService.csproj",
+              "RelativeDocumentMoniker": "AspireApp1.ApiService\\AspireApp1.ApiService.csproj",
+              "ToolTip": "C:\\GitHub\\AspireApp1\\AspireApp1.ApiService\\AspireApp1.ApiService.csproj",
+              "RelativeToolTip": "AspireApp1.ApiService\\AspireApp1.ApiService.csproj",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2026-06-30T20:07:00.28Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 5,
+              "Title": "AspireApp1.AppHost",
+              "DocumentMoniker": "C:\\GitHub\\AspireApp1\\AspireApp1.AppHost\\AspireApp1.AppHost.csproj",
+              "RelativeDocumentMoniker": "AspireApp1.AppHost\\AspireApp1.AppHost.csproj",
+              "ToolTip": "C:\\GitHub\\AspireApp1\\AspireApp1.AppHost\\AspireApp1.AppHost.csproj",
+              "RelativeToolTip": "AspireApp1.AppHost\\AspireApp1.AppHost.csproj",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA8AAAA4AAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2026-06-30T20:06:58.865Z",
+              "EditorCaption": ""
             }
           ]
         }
