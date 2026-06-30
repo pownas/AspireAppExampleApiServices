@@ -15,6 +15,12 @@ builder.Services.AddHttpClient("apiservice3", client =>
     client.BaseAddress = new Uri("http://apiservice3");
 });
 
+// Add HttpClientFactory for calling other services
+builder.Services.AddHttpClient("apierrorservice", client =>
+{
+    client.BaseAddress = new Uri("http://apierrorservice");
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -27,15 +33,15 @@ if (app.Environment.IsDevelopment())
 
 string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
 
-app.MapGet("/", () => "API service is running. Navigate to /weatherforecast to see sample data.");
+app.MapGet("/", () => "API service is running. Navigate to /forecast to see sample data.");
 
-app.MapGet("/weatherforecast", async(IHttpClientFactory httpClientFactory) =>
+app.MapGet("/forecast", async(IHttpClientFactory httpClientFactory) =>
 {
     // Call ApiService3
     var httpClient = httpClientFactory.CreateClient("apiservice3");
     try
     {
-        var response = await httpClient.GetAsync("/weatherforecast");
+        var response = await httpClient.GetAsync("/infoweather");
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
@@ -57,7 +63,38 @@ app.MapGet("/weatherforecast", async(IHttpClientFactory httpClientFactory) =>
         .ToArray();
     return forecast;
 })
-.WithName("GetWeatherForecast");
+.WithName("GetForecast");
+
+app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory) =>
+{
+    var forecast = Enumerable.Range(1, 5).Select(index =>
+        new WeatherForecast
+        (
+            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
+            Random.Shared.Next(-20, 55),
+            summaries[Random.Shared.Next(summaries.Length)]
+        ))
+        .ToArray();
+
+    // Call ApiService2
+    var httpClient = httpClientFactory.CreateClient("apierrorservice");
+    try
+    {
+        var response = await httpClient.GetAsync("/err");
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"ApiErrorService response: {content}");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error calling ApiErrorService: {ex.Message}");
+    }
+
+    return forecast;
+})
+.WithName("GetErrorRequest");
 
 app.MapDefaultEndpoints();
 

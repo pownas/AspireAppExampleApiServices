@@ -9,13 +9,13 @@ builder.Services.AddProblemDetails();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-// Add HttpClientFactory for calling other services
+// Add HttpClientFactory for calling other apiservice2
 builder.Services.AddHttpClient("apiservice2", client =>
 {
     client.BaseAddress = new Uri("http://apiservice2");
 });
 
-// Add HttpClientFactory for calling other services
+// Add HttpClientFactory for calling other apierrorservice (not existing)
 builder.Services.AddHttpClient("apierrorservice", client =>
 {
     client.BaseAddress = new Uri("http://apierrorservice");
@@ -35,7 +35,7 @@ string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "
 
 app.MapGet("/", () => "API service is running. Navigate to /weather to see sample data.");
 
-app.MapGet("/weather", async (IHttpClientFactory httpClientFactory) =>
+app.MapGet("/weatherforecast", async (IHttpClientFactory httpClientFactory) =>
 {
     var forecast = Enumerable.Range(1, 5).Select(index =>
         new WeatherForecast
@@ -50,7 +50,7 @@ app.MapGet("/weather", async (IHttpClientFactory httpClientFactory) =>
     var httpClient = httpClientFactory.CreateClient("apiservice2");
     try
     {
-        var response = await httpClient.GetAsync("/weatherforecast");
+        var response = await httpClient.GetAsync("/forecast");
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
@@ -66,7 +66,9 @@ app.MapGet("/weather", async (IHttpClientFactory httpClientFactory) =>
 })
 .WithName("GetWeatherForecast");
 
-app.MapGet("/error", async (IHttpClientFactory httpClientFactory) =>
+
+
+app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory) =>
 {
     var forecast = Enumerable.Range(1, 5).Select(index =>
         new WeatherForecast
@@ -78,10 +80,10 @@ app.MapGet("/error", async (IHttpClientFactory httpClientFactory) =>
         .ToArray();
 
     // Call ApiService2
-    var httpClient = httpClientFactory.CreateClient("apierrorservice");
+    var httpClient = httpClientFactory.CreateClient("apiservice2");
     try
     {
-        var response = await httpClient.GetAsync("/weatherforecast");
+        var response = await httpClient.GetAsync("/errorcall");
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
@@ -96,6 +98,37 @@ app.MapGet("/error", async (IHttpClientFactory httpClientFactory) =>
     return forecast;
 })
 .WithName("GetErrorRequest");
+
+app.MapGet("/errorcall2", async (IHttpClientFactory httpClientFactory) =>
+{
+    var forecast = Enumerable.Range(1, 5).Select(index =>
+        new WeatherForecast
+        (
+            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
+            Random.Shared.Next(-20, 55),
+            summaries[Random.Shared.Next(summaries.Length)]
+        ))
+        .ToArray();
+
+    // Call ApiService2
+    var httpClient = httpClientFactory.CreateClient("apierrorservice");
+    try
+    {
+        var response = await httpClient.GetAsync("/err");
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"ApiErrorService response: {content}");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error calling ApiErrorService: {ex.Message}");
+    }
+
+    return forecast;
+})
+.WithName("GetErrorRequest2");
 
 app.MapDefaultEndpoints();
 

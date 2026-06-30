@@ -1,4 +1,4 @@
-var builder = WebApplication.CreateBuilder(args);
+﻿var builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
@@ -21,9 +21,9 @@ if (app.Environment.IsDevelopment())
 
 string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"];
 
-app.MapGet("/", () => "API service is running. Navigate to /weatherforecast to see sample data.");
+app.MapGet("/", () => "API service is running. Navigate to /infoweather to see sample data.");
 
-app.MapGet("/weatherforecast", () =>
+app.MapGet("/infoweather", () =>
 {
     var forecast = Enumerable.Range(1, 5).Select(index =>
         new WeatherForecast
@@ -35,7 +35,7 @@ app.MapGet("/weatherforecast", () =>
         .ToArray();
     return forecast;
 })
-.WithName("GetWeatherForecast");
+.WithName("GetInfoWeather");
 
 app.MapDefaultEndpoints();
 
