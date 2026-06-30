@@ -1,8 +1,10 @@
 <Solution>
-  <Project Path=".SolutionItems.csproj" Project="false" Build="false" Deploy="false" />
+  <Project Path=".SolutionItems.csproj" />
+  <Project Path="AspireApp1.ApiExternalService/AspireApp1.ApiExternalService.csproj" />
   <Project Path="AspireApp1.ApiService/AspireApp1.ApiService.csproj" />
   <Project Path="AspireApp1.ApiService2/AspireApp1.ApiService2.csproj" />
-  <Project Path="AspireApp1.ApiService3/AspireApp1.ApiService3.csproj" />
+  <Project Path="AspireApp1.ApiServicePerson/AspireApp1.ApiServicePerson.csproj" />
+  <Project Path="AspireApp1.ApiServiceStaticWeather/AspireApp1.ApiServiceStaticWeather.csproj" />
   <Project Path="AspireApp1.AppHost/AspireApp1.AppHost.csproj" />
   <Project Path="AspireApp1.ServiceDefaults/AspireApp1.ServiceDefaults.csproj" />
   <Project Path="AspireApp1.Tests/AspireApp1.Tests.csproj" />

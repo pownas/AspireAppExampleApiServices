@@ -9,17 +9,22 @@ builder.Services.AddProblemDetails();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-// Add HttpClientFactory for calling other services
-builder.Services.AddHttpClient("apiservice3", client =>
+// Add HttpClientFactories for calling other services
+builder.Services.AddHttpClient("apiservicestaticweather", client =>
 {
-    client.BaseAddress = new Uri("http://apiservice3");
+    client.BaseAddress = new Uri("http://apiservicestaticweather");
 });
 
-// Add HttpClientFactory for calling other services
+builder.Services.AddHttpClient("apiexternalservice", client =>
+{
+    client.BaseAddress = new Uri("http://apiexternalservice");
+});
+
 builder.Services.AddHttpClient("apierrorservice", client =>
 {
     client.BaseAddress = new Uri("http://apierrorservice");
 });
+
 
 var app = builder.Build();
 
@@ -37,20 +42,46 @@ app.MapGet("/", () => "API service is running. Navigate to /forecast to see samp
 
 app.MapGet("/forecast", async(IHttpClientFactory httpClientFactory) =>
 {
-    // Call ApiService3
-    var httpClient = httpClientFactory.CreateClient("apiservice3");
+    // Call ApiServiceStaticWeather
+    var httpClient = httpClientFactory.CreateClient("apiservicestaticweather");
     try
     {
         var response = await httpClient.GetAsync("/infoweather");
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"ApiService3 response: {content}");
+            Console.WriteLine($"ApiServiceStaticWeather response: {content}");
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Error calling ApiService3: {ex.Message}");
+        Console.WriteLine($"Error calling ApiServiceStaticWeather: {ex.Message}");
+    }
+
+
+    // Call apiexternalservice
+    var httpClient2 = httpClientFactory.CreateClient("apiexternalservice");
+    try
+    {
+        var employeeId = Random.Shared.Next(1, 7); // Get a random Employee ID between 1 and 7
+
+        var response = await httpClient2.GetAsync($"/employeeinfo/{employeeId}");
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"ApiExternalService response: {content}");
+        }
+
+        var response2 = await httpClient2.GetAsync($"/employeestatus/{employeeId}");
+        if (response2.IsSuccessStatusCode)
+        {
+            var content2 = await response2.Content.ReadAsStringAsync();
+            Console.WriteLine($"ApiExternalService response: {content2}");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error calling ApiExternalService: {ex.Message}");
     }
 
     var forecast = Enumerable.Range(1, 5).Select(index =>

@@ -9,17 +9,35 @@ var apiService2 = builder.AddProject<Projects.AspireApp1_ApiService2>("apiservic
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
     .WaitFor(apiService);
+// Add reference to apiService2, so apiService can call it
+apiService.WithReference(apiService2);
 
-var apiService3 = builder.AddProject<Projects.AspireApp1_ApiService3>("apiservice3")
+var apiServiceExternal = builder.AddProject<Projects.AspireApp1_ApiExternalService>("apiexternalservice")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints()
     .WithReference(apiService2)
     .WaitFor(apiService2);
+// Add reference to apiServiceExternal, so apiService2 can call them
+apiService2.WithReference(apiServiceExternal);
 
-// Add reference to apiService2 so apiService can call it
-apiService.WithReference(apiService2);
-// Add reference to apiService3 so apiService2 can call it
-apiService2.WithReference(apiService3);
+var apiServiceStaticWeather = builder.AddProject<Projects.AspireApp1_ApiServiceStaticWeather>("apiservicestaticweather")
+    .WithHttpHealthCheck("/health")
+    .WithExternalHttpEndpoints()
+    .WithReference(apiService2)
+    .WaitFor(apiService2);
+// Add reference to apiServiceStaticWeather, so apiService2 can call them
+apiService2.WithReference(apiServiceStaticWeather);
+
+var apiServicePerson = builder.AddProject<Projects.AspireApp1_ApiServicePerson>("apiserviceperson")
+    .WithHttpHealthCheck("/health")
+    .WithExternalHttpEndpoints()
+    .WithReference(apiServiceExternal)
+    .WithReference(apiServiceStaticWeather)
+    .WaitFor(apiServiceExternal)
+    .WaitFor(apiServiceStaticWeather);
+// Add reference to apiServicePerson, so apiServiceExternal and apiServiceStaticWeather can call it
+apiServiceExternal.WithReference(apiServicePerson);
+apiServiceStaticWeather.WithReference(apiServicePerson);
 
 builder.AddProject<Projects.AspireApp1_Web>("webfrontend")
     .WithExternalHttpEndpoints()
@@ -27,7 +45,7 @@ builder.AddProject<Projects.AspireApp1_Web>("webfrontend")
     .WithReference(apiService)
     .WaitFor(apiService)
     .WithReference(apiService2)
-    .WithReference(apiService3);
+    .WithReference(apiServiceStaticWeather);
 
 builder.AddProject<Projects.AspireApp1_WorkerService1>("workerservice1");
 
