@@ -12,6 +12,8 @@
   <ItemGroup>
     <ProjectReference Include="..\AspireApp1.WorkerService1\AspireApp1.WorkerService1.csproj" />
     <ProjectReference Include="..\AspireApp1.ApiService\AspireApp1.ApiService.csproj" />
+    <ProjectReference Include="..\AspireApp1.ApiService2\AspireApp1.ApiService2.csproj" />
+    <ProjectReference Include="..\AspireApp1.ApiService3\AspireApp1.ApiService3.csproj" />
     <ProjectReference Include="..\AspireApp1.Web\AspireApp1.Web.csproj" />
   </ItemGroup>
 
