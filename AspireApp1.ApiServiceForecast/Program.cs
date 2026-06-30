@@ -107,7 +107,7 @@ app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory) =>
         ))
         .ToArray();
 
-    // Call ApiService2
+    // Call apierrorservice
     var httpClient = httpClientFactory.CreateClient("apierrorservice");
     try
     {

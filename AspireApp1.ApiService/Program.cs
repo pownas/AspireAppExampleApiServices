@@ -9,10 +9,10 @@ builder.Services.AddProblemDetails();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-// Add HttpClientFactory for calling other apiservice2
-builder.Services.AddHttpClient("apiservice2", client =>
+// Add HttpClientFactory for calling other apiServiceForecast
+builder.Services.AddHttpClient("apiServiceForecast", client =>
 {
-    client.BaseAddress = new Uri("http://apiservice2");
+    client.BaseAddress = new Uri("http://apiServiceForecast");
 });
 
 // Add HttpClientFactory for calling other apierrorservice (not existing)
@@ -46,20 +46,20 @@ app.MapGet("/weatherforecast", async (IHttpClientFactory httpClientFactory) =>
         ))
         .ToArray();
 
-    // Call ApiService2
-    var httpClient = httpClientFactory.CreateClient("apiservice2");
+    // Call apiServiceForecast
+    var httpClient = httpClientFactory.CreateClient("apiServiceForecast");
     try
     {
         var response = await httpClient.GetAsync("/forecast");
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"ApiService2 response: {content}");
+            Console.WriteLine($"apiServiceForecast response: {content}");
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Error calling ApiService2: {ex.Message}");
+        Console.WriteLine($"Error calling apiServiceForecast: {ex.Message}");
     }
 
     return forecast;
@@ -79,8 +79,8 @@ app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory) =>
         ))
         .ToArray();
 
-    // Call ApiService2
-    var httpClient = httpClientFactory.CreateClient("apiservice2");
+    // Call apiServiceForecast
+    var httpClient = httpClientFactory.CreateClient("apiServiceForecast");
     try
     {
         var response = await httpClient.GetAsync("/errorcall");
@@ -110,7 +110,7 @@ app.MapGet("/errorcall2", async (IHttpClientFactory httpClientFactory) =>
         ))
         .ToArray();
 
-    // Call ApiService2
+    // Call apierrorservice
     var httpClient = httpClientFactory.CreateClient("apierrorservice");
     try
     {

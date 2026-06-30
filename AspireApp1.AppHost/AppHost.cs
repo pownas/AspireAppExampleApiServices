@@ -4,29 +4,29 @@ var apiService = builder.AddProject<Projects.AspireApp1_ApiService>("apiservice"
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints();
 
-var apiService2 = builder.AddProject<Projects.AspireApp1_ApiService2>("apiservice2")
+var apiServiceForecast = builder.AddProject<Projects.AspireApp1_ApiServiceForecast>("apiserviceforecast")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints()
     .WithReference(apiService)
     .WaitFor(apiService);
-// Add reference to apiService2, so apiService can call it
-apiService.WithReference(apiService2);
+// Add reference to apiServiceForecast, so apiService can call it
+apiService.WithReference(apiServiceForecast);
 
 var apiServiceExternal = builder.AddProject<Projects.AspireApp1_ApiExternalService>("apiexternalservice")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints()
-    .WithReference(apiService2)
-    .WaitFor(apiService2);
-// Add reference to apiServiceExternal, so apiService2 can call them
-apiService2.WithReference(apiServiceExternal);
+    .WithReference(apiServiceForecast)
+    .WaitFor(apiServiceForecast);
+// Add reference to apiServiceExternal, so apiServiceForecast can call them
+apiServiceForecast.WithReference(apiServiceExternal);
 
 var apiServiceStaticWeather = builder.AddProject<Projects.AspireApp1_ApiServiceStaticWeather>("apiservicestaticweather")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints()
-    .WithReference(apiService2)
-    .WaitFor(apiService2);
-// Add reference to apiServiceStaticWeather, so apiService2 can call them
-apiService2.WithReference(apiServiceStaticWeather);
+    .WithReference(apiServiceForecast)
+    .WaitFor(apiServiceForecast);
+// Add reference to apiServiceStaticWeather, so apiServiceForecast can call them
+apiServiceForecast.WithReference(apiServiceStaticWeather);
 
 var apiServicePerson = builder.AddProject<Projects.AspireApp1_ApiServicePerson>("apiserviceperson")
     .WithHttpHealthCheck("/health")
@@ -44,7 +44,7 @@ builder.AddProject<Projects.AspireApp1_Web>("webfrontend")
     .WithHttpHealthCheck("/health")
     .WithReference(apiService)
     .WaitFor(apiService)
-    .WithReference(apiService2)
+    .WithReference(apiServiceForecast)
     .WithReference(apiServiceStaticWeather);
 
 builder.AddProject<Projects.AspireApp1_WorkerService1>("workerservice1");
