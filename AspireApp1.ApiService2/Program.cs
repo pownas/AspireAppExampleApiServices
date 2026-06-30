@@ -1,4 +1,4 @@
-var builder = WebApplication.CreateBuilder(args);
+﻿var builder = WebApplication.CreateBuilder(args);
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
@@ -8,6 +8,12 @@ builder.Services.AddProblemDetails();
 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+// Add HttpClientFactory for calling other services
+builder.Services.AddHttpClient("apiservice3", client =>
+{
+    client.BaseAddress = new Uri("http://apiservice3");
+});
 
 var app = builder.Build();
 
@@ -23,8 +29,24 @@ string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "
 
 app.MapGet("/", () => "API service is running. Navigate to /weatherforecast to see sample data.");
 
-app.MapGet("/weatherforecast", () =>
+app.MapGet("/weatherforecast", async(IHttpClientFactory httpClientFactory) =>
 {
+    // Call ApiService3
+    var httpClient = httpClientFactory.CreateClient("apiservice3");
+    try
+    {
+        var response = await httpClient.GetAsync("/weatherforecast");
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"ApiService3 response: {content}");
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error calling ApiService3: {ex.Message}");
+    }
+
     var forecast = Enumerable.Range(1, 5).Select(index =>
         new WeatherForecast
         (
