@@ -5,4 +5,5 @@
   <Project Path="AspireApp1.ServiceDefaults/AspireApp1.ServiceDefaults.csproj" />
   <Project Path="AspireApp1.Tests/AspireApp1.Tests.csproj" />
   <Project Path="AspireApp1.Web/AspireApp1.Web.csproj" />
+  <Project Path="AspireApp1.WorkerService1/AspireApp1.WorkerService1.csproj" />
 </Solution>

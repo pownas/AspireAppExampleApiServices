@@ -9,4 +9,6 @@ builder.AddProject<Projects.AspireApp1_Web>("webfrontend")
     .WithReference(apiService)
     .WaitFor(apiService);
 
+builder.AddProject<Projects.AspireApp1_WorkerService1>("aspireapp1-workerservice1");
+
 builder.Build().Run();
