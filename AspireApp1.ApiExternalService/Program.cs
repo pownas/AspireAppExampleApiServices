@@ -40,7 +40,7 @@ app.MapGet("/employeeinfo/{id}", (int id) =>
 .WithName("GetEmployeeInfoById");
 
 
-app.MapGet("/employeestatus/{id}", (int id) =>
+app.MapGet("/employeestatus/{id}", async (int id, IHttpClientFactory httpClientFactory) =>
 {
     var employee = Employees.GetEmployees().FirstOrDefault(e => e.EmployeeNo == id);
     if (employee == null)
@@ -48,26 +48,28 @@ app.MapGet("/employeestatus/{id}", (int id) =>
         return Results.NotFound();
     }
 
-    //// Call ApiServiceStaticWeather
-    //var httpClient = httpClientFactory.CreateClient("apiservicestaticweather");
-    //try
-    //{
-    //    var response = await httpClient.GetAsync("/infoweather");
-    //    if (response.IsSuccessStatusCode)
-    //    {
-    //        var content = await response.Content.ReadAsStringAsync();
-    //        Console.WriteLine($"ApiServiceStaticWeather response: {content}");
-    //    }
-    //}
-    //catch (Exception ex)
-    //{
-    //    Console.WriteLine($"Error calling ApiServiceStaticWeather: {ex.Message}");
-    //}
+    // Call ApiServicePerson
+    bool isAlive = false;
+    var httpClient = httpClientFactory.CreateClient("apiserviceperson");
+    try
+    {
+        var response = await httpClient.GetAsync($"/persons/status/{id}");
+        if (response.IsSuccessStatusCode)
+        {
+            var content = await response.Content.ReadAsStringAsync();
+            Console.WriteLine($"ApiServicePerson response: {content}");
+            isAlive = bool.TryParse(content, out var result) && result;
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error calling ApiServicePerson: {ex.Message}");
+    }
 
     EmployeeStatus status = new EmployeeStatus
     (
         EmployeeNo: employee.EmployeeNo,
-        PersonAlive: true, // For demonstration purposes, we assume the person is alive
+        PersonAlive: isAlive, // For demonstration purposes, we assume the person is alive
         Status: employee.DateExit.HasValue ? "Inactive" : "Active"
     );
 
