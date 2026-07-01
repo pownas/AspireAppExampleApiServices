@@ -250,3 +250,6 @@ internal sealed record WorkerJobMessage(
     string TraceParent,
     string? TraceState,
     string CorrelationId);
+
+public partial class Program;
+public sealed class ApiServiceForecastEntryPoint;
