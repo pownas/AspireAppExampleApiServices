@@ -39,7 +39,7 @@ app.MapGet("/err", (ILogger<Program> logger) =>
     };
 
     var statusCode = errorCodes[Random.Shared.Next(errorCodes.Length)];
-    logger.LogError("Returning error response. status_code={status_code}", statusCode);
+    logger.LogInformation("Returning error response. status_code={status_code}", statusCode);
     return Results.StatusCode(statusCode);
 })
 .WithName("GetError");
