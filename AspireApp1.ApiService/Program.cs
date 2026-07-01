@@ -18,7 +18,7 @@ builder.Services.AddHttpClient("apiServiceForecast", client =>
     client.BaseAddress = new Uri("http://apiServiceForecast");
 });
 
-// Add HttpClientFactory for calling other apierrorservice (not existing)
+// Add HttpClientFactory for calling apierrorservice
 builder.Services.AddHttpClient("apierrorservice", client =>
 {
     client.BaseAddress = new Uri("http://apierrorservice");

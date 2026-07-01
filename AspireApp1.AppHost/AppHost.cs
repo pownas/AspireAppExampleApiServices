@@ -4,6 +4,9 @@ var apiService = builder.AddProject<Projects.AspireApp1_ApiService>("apiservice"
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints();
 
+var apiErrorService = builder.AddProject<Projects.AspireApp1_ApiErrorService>("apierrorservice")
+    .WithExternalHttpEndpoints();
+
 var apiServiceForecast = builder.AddProject<Projects.AspireApp1_ApiServiceForecast>("apiserviceforecast")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints()
@@ -11,6 +14,8 @@ var apiServiceForecast = builder.AddProject<Projects.AspireApp1_ApiServiceForeca
     .WaitFor(apiService);
 // Add reference to apiServiceForecast, so apiService can call it
 apiService.WithReference(apiServiceForecast);
+// Add reference to apiErrorService, so apiService can call it
+apiService.WithReference(apiErrorService);
 
 var apiServiceExternal = builder.AddProject<Projects.AspireApp1_ApiExternalService>("apiexternalservice")
     .WithHttpHealthCheck("/health")
