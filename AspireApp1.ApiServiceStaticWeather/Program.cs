@@ -49,6 +49,7 @@ app.MapGet("/infoweather", async (IHttpClientFactory httpClientFactory, ILogger<
         {
             var content = await response.Content.ReadAsStringAsync();
             isAlive = bool.TryParse(content, out var result) && result;
+            logger.LogInformation("ApiServicePerson status response content. response_content={response_content}", content);
             logger.LogInformation("ApiServicePerson status retrieved. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),

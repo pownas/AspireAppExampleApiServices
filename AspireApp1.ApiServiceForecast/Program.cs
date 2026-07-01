@@ -62,6 +62,8 @@ app.MapGet("/forecast", async (IHttpClientFactory httpClientFactory, ILogger<Pro
         var response = await httpClient.GetAsync("/infoweather");
         if (response.IsSuccessStatusCode)
         {
+            var content = await response.Content.ReadAsStringAsync();
+            logger.LogInformation("ApiServiceStaticWeather response content. response_content={response_content}", content);
             logger.LogInformation("ApiServiceStaticWeather response retrieved. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),
@@ -97,6 +99,8 @@ app.MapGet("/forecast", async (IHttpClientFactory httpClientFactory, ILogger<Pro
         var response = await httpClient2.GetAsync($"/employeeinfo/{employeeId}");
         if (response.IsSuccessStatusCode)
         {
+            var content = await response.Content.ReadAsStringAsync();
+            logger.LogInformation("ApiExternalService employee info response content. response_content={response_content}", content);
             logger.LogInformation("ApiExternalService employee info retrieved. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),
@@ -109,6 +113,8 @@ app.MapGet("/forecast", async (IHttpClientFactory httpClientFactory, ILogger<Pro
         var response2 = await httpClient2.GetAsync($"/employeestatus/{employeeId}");
         if (response2.IsSuccessStatusCode)
         {
+            var content2 = await response2.Content.ReadAsStringAsync();
+            logger.LogInformation("ApiExternalService employee status response content. response_content={response_content}", content2);
             logger.LogInformation("ApiExternalService employee status retrieved. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),
@@ -158,6 +164,8 @@ app.MapGet("/forecast", async (IHttpClientFactory httpClientFactory, ILogger<Pro
     }
     else
     {
+        var workerResponseContent = await workerResponse.Content.ReadAsStringAsync();
+        logger.LogInformation("Worker job response content. response_content={response_content}", workerResponseContent);
         logger.LogInformation("Queued worker job {job_id}. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
             job.JobId,
             Activity.Current?.TraceId.ToString(),
@@ -200,6 +208,8 @@ app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory, ILogger<Pr
         var response = await httpClient.GetAsync("/err");
         if (response.IsSuccessStatusCode)
         {
+            var content = await response.Content.ReadAsStringAsync();
+            logger.LogInformation("Error flow response content from apierrorservice. response_content={response_content}", content);
             logger.LogInformation("Error flow response received from apierrorservice. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),

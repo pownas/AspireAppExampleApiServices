@@ -59,6 +59,8 @@ app.MapGet("/weatherforecast", async (IHttpClientFactory httpClientFactory, ILog
         var response = await httpClient.GetAsync("/forecast");
         if (response.IsSuccessStatusCode)
         {
+            var content = await response.Content.ReadAsStringAsync();
+            logger.LogInformation("apiServiceForecast response content. response_content={response_content}", content);
             logger.LogInformation("apiServiceForecast response retrieved. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),
@@ -109,6 +111,8 @@ app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory, ILogger<Pr
         var response = await httpClient.GetAsync("/errorcall");
         if (response.IsSuccessStatusCode)
         {
+            var content = await response.Content.ReadAsStringAsync();
+            logger.LogInformation("Error flow response content from apiServiceForecast. response_content={response_content}", content);
             logger.LogInformation("Error flow response received from apiServiceForecast. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),
@@ -165,6 +169,8 @@ app.MapGet("/errorcall2", async (IHttpClientFactory httpClientFactory, ILogger<P
         var response = await httpClient.GetAsync("/err");
         if (response.IsSuccessStatusCode)
         {
+            var content = await response.Content.ReadAsStringAsync();
+            logger.LogInformation("Error flow response content from apierrorservice. response_content={response_content}", content);
             logger.LogInformation("Error flow response received from apierrorservice. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),
