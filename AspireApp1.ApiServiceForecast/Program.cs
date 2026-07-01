@@ -252,4 +252,4 @@ internal sealed record WorkerJobMessage(
     string CorrelationId);
 
 public partial class Program;
-public sealed class ApiServiceForecastEntryPoint;
+public sealed class ApiServiceForecastWebApplicationFactoryEntryPoint;

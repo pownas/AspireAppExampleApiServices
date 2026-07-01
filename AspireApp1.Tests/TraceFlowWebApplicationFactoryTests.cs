@@ -90,7 +90,7 @@ public class TraceFlowWebApplicationFactoryTests
         AssertHasTraceParentWithPrefix(workerRequests.Single(), expectedTracePrefix);
     }
 
-    private static WebApplicationFactory<ApiServiceForecastEntryPoint> CreateFactory(
+    private static WebApplicationFactory<ApiServiceForecastWebApplicationFactoryEntryPoint> CreateFactory(
         Func<RecordedRequest, HttpResponseMessage> staticWeatherResponder,
         Func<RecordedRequest, HttpResponseMessage> externalServiceResponder,
         Func<RecordedRequest, HttpResponseMessage> workerResponder,
@@ -98,22 +98,37 @@ public class TraceFlowWebApplicationFactoryTests
         RequestRecorder externalServiceRequests,
         RequestRecorder workerRequests)
     {
-        return new WebApplicationFactory<ApiServiceForecastEntryPoint>()
+        return new WebApplicationFactory<ApiServiceForecastWebApplicationFactoryEntryPoint>()
             .WithWebHostBuilder(builder =>
             {
                 builder.ConfigureServices(services =>
                 {
                     services.RemoveAll<IHttpClientFactory>();
-                    services.AddSingleton<IHttpClientFactory>(
-                        new FakeHttpClientFactory(new Dictionary<string, HttpClient>(StringComparer.Ordinal)
-                        {
-                            ["apiservicestaticweather"] = CreateClient(staticWeatherRequests, staticWeatherResponder),
-                            ["apiexternalservice"] = CreateClient(externalServiceRequests, externalServiceResponder),
-                            ["apierrorservice"] = CreateClient(new RequestRecorder(), _ => new HttpResponseMessage(HttpStatusCode.OK)),
-                            ["workerservice1"] = CreateClient(workerRequests, workerResponder)
-                        }));
+                    services.AddSingleton<IHttpClientFactory>(new FakeHttpClientFactory(CreateFakeClients(
+                        staticWeatherRequests,
+                        staticWeatherResponder,
+                        externalServiceRequests,
+                        externalServiceResponder,
+                        workerRequests,
+                        workerResponder)));
                 });
             });
+    }
+
+    private static IDictionary<string, HttpClient> CreateFakeClients(
+        RequestRecorder staticWeatherRequests,
+        Func<RecordedRequest, HttpResponseMessage> staticWeatherResponder,
+        RequestRecorder externalServiceRequests,
+        Func<RecordedRequest, HttpResponseMessage> externalServiceResponder,
+        RequestRecorder workerRequests,
+        Func<RecordedRequest, HttpResponseMessage> workerResponder)
+    {
+        return new Dictionary<string, HttpClient>(StringComparer.Ordinal)
+        {
+            ["apiservicestaticweather"] = CreateClient(staticWeatherRequests, staticWeatherResponder),
+            ["apiexternalservice"] = CreateClient(externalServiceRequests, externalServiceResponder),
+            ["workerservice1"] = CreateClient(workerRequests, workerResponder)
+        };
     }
 
     private static HttpClient CreateClient(RequestRecorder recorder, Func<RecordedRequest, HttpResponseMessage> responder)
@@ -154,10 +169,7 @@ public class TraceFlowWebApplicationFactoryTests
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            if (!request.Headers.Contains("traceparent") && !string.IsNullOrWhiteSpace(Activity.Current?.Id))
-            {
-                request.Headers.TryAddWithoutValidation("traceparent", Activity.Current.Id);
-            }
+            TrySetTraceParentHeaderFromCurrentActivity(request);
 
             var body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             var recordedRequest = new RecordedRequest(
@@ -168,6 +180,14 @@ public class TraceFlowWebApplicationFactoryTests
 
             recorder.Add(recordedRequest);
             return responder(recordedRequest);
+        }
+
+        private static void TrySetTraceParentHeaderFromCurrentActivity(HttpRequestMessage request)
+        {
+            if (!request.Headers.Contains("traceparent") && !string.IsNullOrWhiteSpace(Activity.Current?.Id))
+            {
+                request.Headers.TryAddWithoutValidation("traceparent", Activity.Current.Id);
+            }
         }
     }
 
