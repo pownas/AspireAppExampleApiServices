@@ -47,6 +47,10 @@ builder.AddProject<Projects.AspireApp1_Web>("webfrontend")
     .WithReference(apiServiceForecast)
     .WithReference(apiServiceStaticWeather);
 
-builder.AddProject<Projects.AspireApp1_WorkerService1>("workerservice1");
+var workerService = builder.AddProject<Projects.AspireApp1_WorkerService1>("workerservice1")
+    .WithHttpHealthCheck("/health")
+    .WithExternalHttpEndpoints();
+
+apiServiceForecast.WithReference(workerService).WaitFor(workerService);
 
 builder.Build().Run();
