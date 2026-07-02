@@ -20,3 +20,9 @@ To get started with the AspireApp1 example project, follow these steps:
 2. Kör anrop från `webfrontend` till backend (exempel: väderflödet).
 3. Öppna trace-vyn i Aspire dashboard och följ samma `trace_id` genom tjänstekedjan.
 4. Kontrollera worker-loggar för samma `trace_id` och `correlation_id` vid async-jobb/retry/finalt fel.
+
+## Frontend-visualisering av processflöde
+
+För krav och specifikation gällande frontend-visualisering av processflöde via `traceId`/`correlationId`, se:
+
+- [Kravspecifikation: Frontend-visualisering av processflöde](docs/kravspecifikation-frontend-processflode.md)
