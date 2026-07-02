@@ -1,0 +1,437 @@
+@page "/processflow"
+@rendermode InteractiveServer
+
+@using AspireApp1.Web.Models
+@using System.Text.RegularExpressions
+@inject AspireDashboardClient DashboardClient
+@inject ILogger<ProcessFlow> Logger
+
+<PageTitle>Processflöde</PageTitle>
+
+<h1>Processflöde</h1>
+
+<p>Sök och visualisera telemetriflöden via TraceId, CorrelationId eller SpanId.</p>
+
+<!-- Search form -->
+<div class="search-panel mb-4">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label fw-semibold">Söktyp</label>
+            <select class="form-select" @bind="searchType">
+                <option value="traceId">TraceId</option>
+                <option value="correlationId">CorrelationId</option>
+                <option value="spanId">SpanId</option>
+            </select>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label fw-semibold">
+                @if (searchType == "traceId") { <text>TraceId (hex, minst 16 tecken)</text> }
+                else if (searchType == "correlationId") { <text>CorrelationId (GUID eller sträng)</text> }
+                else { <text>SpanId (16 hexadecimala tecken)</text> }
+            </label>
+            <input class="form-control" type="text" @bind="searchInput" placeholder="Ange ID..." />
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-primary w-100" @onclick="SearchAsync" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                }
+                Sök
+            </button>
+        </div>
+    </div>
+    @if (!string.IsNullOrEmpty(validationError))
+    {
+        <div class="alert alert-warning mt-2 mb-0">@validationError</div>
+    }
+</div>
+
+<!-- Results -->
+@if (notFound)
+{
+    <div class="alert alert-info">Inga flödessteg hittades för angivet ID.</div>
+}
+else if (currentTrace is not null)
+{
+    <!-- Overall status badge -->
+    <div class="mb-3">
+        <span class="badge fs-6 @GetOverallStatusBadge(currentTrace).cssClass">@GetOverallStatusBadge(currentTrace).text</span>
+    </div>
+
+    <!-- View toggle + filters -->
+    <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
+        <div class="btn-group" role="group" aria-label="Vyval">
+            <button type="button" class="btn @(viewMode == "steps" ? "btn-primary" : "btn-outline-primary")" @onclick='() => viewMode = "steps"'>Stegvy</button>
+            <button type="button" class="btn @(viewMode == "gantt" ? "btn-primary" : "btn-outline-primary")" @onclick='() => viewMode = "gantt"'>Tidslinjevy</button>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <label class="form-label mb-0 fw-semibold">Tjänst:</label>
+            <select class="form-select form-select-sm" style="width:auto;" @bind="serviceFilter">
+                <option value="">Alla</option>
+                @foreach (var svc in GetServiceNames())
+                {
+                    <option value="@svc">@svc</option>
+                }
+            </select>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <label class="form-label mb-0 fw-semibold">Status:</label>
+            <select class="form-select form-select-sm" style="width:auto;" @bind="statusFilter">
+                <option value="">Alla</option>
+                @foreach (var s in Enum.GetNames<SpanStatus>())
+                {
+                    <option value="@s">@s</option>
+                }
+            </select>
+        </div>
+    </div>
+
+    @if (viewMode == "steps")
+    {
+        <div class="step-tree">
+            @foreach (var span in GetRootSpans(VisibleSpans))
+            {
+                @RenderSpanTree(span, VisibleSpans, 0)
+            }
+        </div>
+    }
+    else
+    {
+        @RenderGanttView(VisibleSpans)
+    }
+}
+
+<!-- Detail panel -->
+@if (selectedSpan is not null)
+{
+    <div class="detail-panel mt-4 p-3 border rounded">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+            <h5 class="mb-0">Detaljer: @selectedSpan.OperationName</h5>
+            <button type="button" class="btn-close" @onclick="CloseDetail" aria-label="Stäng"></button>
+        </div>
+        <dl class="row mb-0">
+            <dt class="col-sm-3">SpanId</dt>
+            <dd class="col-sm-9"><code>@selectedSpan.SpanId</code></dd>
+            <dt class="col-sm-3">ParentSpanId</dt>
+            <dd class="col-sm-9"><code>@(selectedSpan.ParentSpanId ?? "–")</code></dd>
+            <dt class="col-sm-3">Tjänst</dt>
+            <dd class="col-sm-9">@selectedSpan.ServiceName</dd>
+            <dt class="col-sm-3">Status</dt>
+            <dd class="col-sm-9">@GetStatusEmoji(selectedSpan.Status) @selectedSpan.Status</dd>
+            <dt class="col-sm-3">Starttid</dt>
+            <dd class="col-sm-9">@selectedSpan.StartTime.ToString("yyyy-MM-dd HH:mm:ss.fff zzz")</dd>
+            <dt class="col-sm-3">Varaktighet</dt>
+            <dd class="col-sm-9">@(selectedSpan.Duration.HasValue ? $"{selectedSpan.Duration.Value.TotalMilliseconds:F1} ms" : "–")</dd>
+            @if (selectedSpan.HttpStatusCode.HasValue)
+            {
+                <dt class="col-sm-3">HTTP-status</dt>
+                <dd class="col-sm-9">@selectedSpan.HttpStatusCode</dd>
+            }
+            @if (!string.IsNullOrEmpty(selectedSpan.ErrorMessage))
+            {
+                <dt class="col-sm-3">Felmeddelande</dt>
+                <dd class="col-sm-9 text-danger">@selectedSpan.ErrorMessage</dd>
+            }
+        </dl>
+        @if (selectedSpan.LogEntries.Count > 0)
+        {
+            <h6 class="mt-3">Loggposter</h6>
+            <div class="log-entries">
+                @foreach (var log in selectedSpan.LogEntries)
+                {
+                    <div class="log-entry @GetLogLevelClass(log.Level) mb-1 p-1 rounded small">
+                        <span class="fw-semibold me-1">[@log.Timestamp.ToString("HH:mm:ss.fff")]</span>
+                        <span class="badge @GetLogBadgeClass(log.Level) me-1">@log.Level</span>
+                        @log.Message
+                        @if (log.Attributes.Count > 0)
+                        {
+                            <div class="mt-1 ms-2 text-muted">
+                                @foreach (var attr in log.Attributes)
+                                {
+                                    <span class="me-2"><strong>@attr.Key</strong>=@attr.Value</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private string searchType = "traceId";
+    private string searchInput = string.Empty;
+    private string viewMode = "steps";
+    private string serviceFilter = string.Empty;
+    private string statusFilter = string.Empty;
+    private bool isLoading;
+    private bool notFound;
+    private string? validationError;
+    private TraceModel? currentTrace;
+    private SpanModel? selectedSpan;
+    private string? highlightSpanId;
+    private HashSet<string> highlightedSpanIds = [];
+
+    private async Task SearchAsync()
+    {
+        validationError = null;
+        notFound = false;
+        selectedSpan = null;
+        highlightSpanId = null;
+        highlightedSpanIds = [];
+        currentTrace = null;
+
+        if (string.IsNullOrWhiteSpace(searchInput))
+        {
+            validationError = "Ange ett ID att söka på.";
+            return;
+        }
+
+        if (searchType == "traceId" && !TraceIdRegex.IsMatch(searchInput.Trim()))
+        {
+            validationError = "TraceId måste vara 16–32 hexadecimala tecken.";
+            return;
+        }
+
+        if (searchType == "spanId" && !SpanIdRegex.IsMatch(searchInput.Trim()))
+        {
+            validationError = "SpanId måste vara exakt 16 hexadecimala tecken.";
+            return;
+        }
+
+        isLoading = true;
+        try
+        {
+            TraceModel? trace = searchType switch
+            {
+                "traceId" => await DashboardClient.GetTraceAsync(searchInput.Trim()),
+                "correlationId" => await DashboardClient.GetByCorrelationIdAsync(searchInput.Trim()),
+                "spanId" => await DashboardClient.GetTraceBySpanIdAsync(searchInput.Trim()),
+                _ => null
+            };
+
+            if (trace is null || trace.Spans.Count == 0)
+            {
+                notFound = true;
+            }
+            else
+            {
+                currentTrace = trace;
+                if (searchType == "spanId")
+                {
+                    highlightSpanId = searchInput.Trim().ToLowerInvariant();
+                    highlightedSpanIds = [highlightSpanId];
+                }
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            Logger.LogWarning(ex, "HTTP error while searching for trace. SearchType={SearchType} Input={Input}", searchType, searchInput);
+            notFound = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Unexpected error while searching for trace. SearchType={SearchType} Input={Input}", searchType, searchInput);
+            notFound = true;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private List<SpanModel> VisibleSpans => GetFilteredSpans();
+
+    private List<SpanModel> GetFilteredSpans()
+    {
+        if (currentTrace is null)
+        {
+            return [];
+        }
+
+        var spans = currentTrace.Spans.AsEnumerable();
+
+        if (!string.IsNullOrEmpty(serviceFilter))
+        {
+            spans = spans.Where(s => s.ServiceName == serviceFilter);
+        }
+
+        if (!string.IsNullOrEmpty(statusFilter) && Enum.TryParse<SpanStatus>(statusFilter, out var parsedStatus))
+        {
+            spans = spans.Where(s => s.Status == parsedStatus);
+        }
+
+        return [.. spans.OrderBy(s => s.StartTime)];
+    }
+
+    private static IEnumerable<SpanModel> GetRootSpans(List<SpanModel> spans)
+    {
+        var ids = spans.Select(s => s.SpanId).ToHashSet();
+        return spans.Where(s => s.ParentSpanId is null || !ids.Contains(s.ParentSpanId)).OrderBy(s => s.StartTime);
+    }
+
+    private IEnumerable<string> GetServiceNames()
+    {
+        if (currentTrace is null)
+        {
+            return [];
+        }
+
+        return currentTrace.Spans.Select(s => s.ServiceName).Distinct().Order();
+    }
+
+    private void SelectSpan(SpanModel span)
+    {
+        selectedSpan = selectedSpan?.SpanId == span.SpanId ? null : span;
+    }
+
+    private void CloseDetail() => selectedSpan = null;
+
+    private static (string cssClass, string text) GetOverallStatusBadge(TraceModel trace)
+    {
+        if (trace.OverallStatus == SpanStatus.Error)
+        {
+            var errorSpan = trace.Spans.Find(s => s.Status == SpanStatus.Error);
+            return ("bg-danger", $"Flöde misslyckades – Fel i steg {errorSpan?.OperationName ?? "okänt"}");
+        }
+
+        return trace.OverallStatus switch
+        {
+            SpanStatus.OK => ("bg-success", "Flöde slutfört – OK"),
+            SpanStatus.Warning => ("bg-warning text-dark", "Flöde slutfört med varningar"),
+            SpanStatus.InProgress => ("bg-info text-dark", "Flöde pågår"),
+            _ => ("bg-secondary", "Status okänd")
+        };
+    }
+
+    private static string GetStatusEmoji(SpanStatus status) => status switch
+    {
+        SpanStatus.OK => "✅",
+        SpanStatus.Warning => "⚠️",
+        SpanStatus.Error => "❌",
+        SpanStatus.InProgress => "🔄",
+        _ => "❓"
+    };
+
+    private static string GetStatusRowClass(SpanStatus status) => status switch
+    {
+        SpanStatus.Error => "table-danger",
+        SpanStatus.Warning => "table-warning",
+        SpanStatus.InProgress => "table-info",
+        _ => string.Empty
+    };
+
+    private static string GetLogLevelClass(string level) => level.ToUpperInvariant() switch
+    {
+        "ERROR" or "CRITICAL" => "bg-danger bg-opacity-10",
+        "WARNING" or "WARN" => "bg-warning bg-opacity-10",
+        _ => "bg-light"
+    };
+
+    private static string GetLogBadgeClass(string level) => level.ToUpperInvariant() switch
+    {
+        "ERROR" or "CRITICAL" => "bg-danger",
+        "WARNING" or "WARN" => "bg-warning text-dark",
+        "INFORMATION" or "INFO" => "bg-info text-dark",
+        "DEBUG" => "bg-secondary",
+        _ => "bg-secondary"
+    };
+
+    private RenderFragment RenderSpanTree(SpanModel span, List<SpanModel> allSpans, int depth) => __builder =>
+    {
+        var children = allSpans.Where(s => s.ParentSpanId == span.SpanId).OrderBy(s => s.StartTime).ToList();
+        var isHighlighted = highlightedSpanIds.Contains(span.SpanId.ToLowerInvariant());
+        var rowClass = isHighlighted ? "table-primary" : GetStatusRowClass(span.Status);
+        var durationMs = span.Duration.HasValue ? $"{span.Duration.Value.TotalMilliseconds:F1} ms" : "–";
+
+        <div class="span-row @rowClass mb-1 p-2 border rounded" style="margin-left: @(depth * 1.5)rem;">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span>@GetStatusEmoji(span.Status)</span>
+                <strong>@span.ServiceName</strong>
+                <span class="text-muted">›</span>
+                <span>@span.OperationName</span>
+                <small class="text-muted ms-auto">@span.StartTime.ToString("HH:mm:ss.fff") | @durationMs</small>
+                <button class="btn btn-sm btn-outline-secondary py-0 px-1" @onclick="() => SelectSpan(span)" title="Visa detaljer">
+                    @(selectedSpan?.SpanId == span.SpanId ? "▲" : "▼")
+                </button>
+            </div>
+            @if (!string.IsNullOrEmpty(span.ErrorMessage))
+            {
+                <div class="text-danger small mt-1">@span.ErrorMessage</div>
+            }
+        </div>
+
+        @foreach (var child in children)
+        {
+            @RenderSpanTree(child, allSpans, depth + 1)
+        }
+    };
+
+    private RenderFragment RenderGanttView(List<SpanModel> spans) => __builder =>
+    {
+        if (spans.Count == 0)
+        {
+            <p class="text-muted">Inga spans att visa.</p>
+            return;
+        }
+
+        var traceStart = spans.Min(s => s.StartTime);
+        var traceEnd = spans
+            .Select(s => s.Duration.HasValue ? s.StartTime + s.Duration.Value : s.StartTime)
+            .Max();
+        var totalMs = (traceEnd - traceStart).TotalMilliseconds;
+        if (totalMs <= 0)
+        {
+            totalMs = 1;
+        }
+
+        <div class="gantt-container" style="overflow-x: auto;">
+            <table class="table table-sm table-bordered mb-0">
+                <thead>
+                    <tr>
+                        <th style="min-width:200px;">Tjänst / Operation</th>
+                        <th>Tidslinje (@totalMs.ToString("F0") ms totalt)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var span in spans)
+                    {
+                        var offsetPct = totalMs > 0 ? (span.StartTime - traceStart).TotalMilliseconds / totalMs * 100 : 0;
+                        var widthPct = span.Duration.HasValue && totalMs > 0
+                            ? Math.Max(0.5, span.Duration.Value.TotalMilliseconds / totalMs * 100)
+                            : 0.5;
+                        var barClass = span.Status switch
+                        {
+                            SpanStatus.Error => "bg-danger",
+                            SpanStatus.Warning => "bg-warning",
+                            SpanStatus.OK => "bg-success",
+                            SpanStatus.InProgress => "bg-info",
+                            _ => "bg-secondary"
+                        };
+                        var isHighlighted = highlightedSpanIds.Contains(span.SpanId.ToLowerInvariant());
+
+                        <tr class="@(isHighlighted ? "table-primary" : string.Empty)" @onclick="() => SelectSpan(span)" style="cursor:pointer;" title="@span.OperationName">
+                            <td class="small">
+                                <span>@GetStatusEmoji(span.Status)</span>
+                                <strong>@span.ServiceName</strong><br />
+                                <span class="text-muted">@span.OperationName</span>
+                            </td>
+                            <td style="position:relative; min-width:300px; height:2.5rem; padding:0;">
+                                <div style="position:absolute; left:@(offsetPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; width:@(widthPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; top:25%; height:50%; border-radius:3px;"
+                                     class="@barClass" title="@(span.Duration.HasValue ? $"{span.Duration.Value.TotalMilliseconds:F1} ms" : "okänd varaktighet")">
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    };
+
+    private static readonly Regex TraceIdRegex = new(@"^[0-9a-fA-F]{16,32}$", RegexOptions.Compiled);
+    private static readonly Regex SpanIdRegex = new(@"^[0-9a-fA-F]{16}$", RegexOptions.Compiled);
+}
