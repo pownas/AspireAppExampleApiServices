@@ -23,6 +23,7 @@ To get started with the AspireApp1 example project, follow these steps:
 
 ## Frontend-visualisering av processflöde
 
-För krav och specifikation gällande frontend-visualisering av processflöde via `traceId`/`correlationId`, se:
+För krav, specifikation och implementationsplan gällande frontend-visualisering av processflöde via `traceId`/`correlationId`, se:
 
 - [Kravspecifikation: Frontend-visualisering av processflöde](docs/kravspecifikation-frontend-processflode.md)
+- [Implementationsplan: Frontend-visualisering av processflöde](docs/implementationsplan-frontend-processflode.md)

@@ -233,11 +233,20 @@ correlationId (1 per logiskt affärsflöde, kan spänna över multipla traces vi
 
 | Fråga | Status |
 |-------|--------|
-| Vilken teknisk plattform ska frontend byggas i? (Blazor, React, Angular etc.) | Öppen – beslutas i design-fasen |
-| Vilken telemetribackend används som datakälla? (Aspire-dashboard, Jaeger, Azure Monitor) | Öppen – beroende av miljöval |
+| Vilken teknisk plattform ska frontend byggas i? (Blazor, React, Angular etc.) | **Beslutat: Blazor** – frontend implementeras som en Blazor Server-komponent i projektet `AspireApp1.Web`. |
+| Var i lösningen ska frontend-sidan placeras? | **Beslutat: Egen Blazor-sida** – en dedikerad sida (`/processflow`) läggs till under `AspireApp1.Web/Components/Pages/`. |
+| Vilken telemetribackend används som datakälla? (Aspire-dashboard, Jaeger, Azure Monitor) | **Beslutat: Aspire-dashboard** – telemetridata hämtas via Aspire-dashboardens inbyggda OTLP-API. |
+| Behövs stöd för att söka via `spanId`? | **Beslutat: Ja** – sökning via `spanId` (16 hexadecimala tecken) ska stödjas, se FR-1 och det tillagda kravet FR-21 nedan. |
 | Ska traces kunna exporteras som PDF/CSV? | Avgränsat – ingår ej i denna version |
 | Ska notifieringar skickas vid felflöden? | Avgränsat – ingår ej i denna version |
-| Behövs stöd för att söka via `spanId`? | Öppen – kan utredas i nästa iteration |
+
+### 10.1 Tillägg till funktionella krav (beslutade)
+
+**FR-21:** Användaren ska kunna söka på ett `spanId` (16 hexadecimala tecken) i sökfältet. Systemet ska visa det specifika steget samt hela det trace-träd som spanet tillhör.
+
+**FR-22:** Datahämtning sker via Aspire-dashboardens OTLP-kompatibla API. Frontend-komponenten anropar ett internt proxy-API i `AspireApp1.Web` (eller `AspireApp1.ApiService`) som vidarebefordrar frågor mot Aspire-dashboardens telemetrilagring.
+
+**FR-23:** Den nya Blazor-sidan för processflödesvisualisering ska nås via navigeringsmenyn i `NavMenu.razor` och ha routen `/processflow`.
 
 ---
 
