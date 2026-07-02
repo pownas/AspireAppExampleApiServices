@@ -1,4 +1,8 @@
-﻿var builder = WebApplication.CreateBuilder(args);
+﻿using System.Diagnostics;
+using System.Net.Http.Json;
+
+var builder = WebApplication.CreateBuilder(args);
+var activitySource = new ActivitySource("AspireApp1.ApiServiceForecast");
 
 // Add service defaults & Aspire client integrations.
 builder.AddServiceDefaults();
@@ -25,11 +29,17 @@ builder.Services.AddHttpClient("apierrorservice", client =>
     client.BaseAddress = new Uri("http://apierrorservice");
 });
 
+builder.Services.AddHttpClient("workerservice1", client =>
+{
+    client.BaseAddress = new Uri("http://workerservice1");
+});
+
 
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 app.UseExceptionHandler();
+app.UseTraceContextLogScope();
 
 if (app.Environment.IsDevelopment())
 {
@@ -40,22 +50,42 @@ string[] summaries = ["Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "
 
 app.MapGet("/", () => "API service is running. Navigate to /forecast to see sample data.");
 
-app.MapGet("/forecast", async(IHttpClientFactory httpClientFactory) =>
+app.MapGet("/forecast", async (IHttpClientFactory httpClientFactory, ILogger<Program> logger, IHostEnvironment hostEnvironment, HttpContext httpContext) =>
 {
+    var correlationId = httpContext.Items["correlation_id"]?.ToString() ?? Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
+
     // Call ApiServiceStaticWeather
     var httpClient = httpClientFactory.CreateClient("apiservicestaticweather");
     try
     {
+        using var staticWeatherCallActivity = activitySource.StartActivity("ApiServiceForecast.CallStaticWeather", ActivityKind.Internal);
         var response = await httpClient.GetAsync("/infoweather");
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"ApiServiceStaticWeather response: {content}");
+            logger.LogInformation("ApiServiceStaticWeather response content. response_content={response_content}", content);
+            logger.LogInformation("ApiServiceStaticWeather response retrieved. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+                Activity.Current?.TraceId.ToString(),
+                Activity.Current?.SpanId.ToString(),
+                Activity.Current?.ParentSpanId.ToString(),
+                hostEnvironment.ApplicationName,
+                DateTimeOffset.UtcNow,
+                correlationId);
+        }
+        else
+        {
+            staticWeatherCallActivity?.SetStatus(ActivityStatusCode.Error, $"Status code: {response.StatusCode}");
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Error calling ApiServiceStaticWeather: {ex.Message}");
+        logger.LogError(ex, "Error calling ApiServiceStaticWeather. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+            Activity.Current?.TraceId.ToString(),
+            Activity.Current?.SpanId.ToString(),
+            Activity.Current?.ParentSpanId.ToString(),
+            hostEnvironment.ApplicationName,
+            DateTimeOffset.UtcNow,
+            correlationId);
     }
 
 
@@ -63,25 +93,87 @@ app.MapGet("/forecast", async(IHttpClientFactory httpClientFactory) =>
     var httpClient2 = httpClientFactory.CreateClient("apiexternalservice");
     try
     {
+        using var externalServiceCallActivity = activitySource.StartActivity("ApiServiceForecast.CallExternalService", ActivityKind.Internal);
         var employeeId = Random.Shared.Next(1, 7); // Get a random Employee ID between 1 and 7
 
         var response = await httpClient2.GetAsync($"/employeeinfo/{employeeId}");
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"ApiExternalService response: {content}");
+            logger.LogInformation("ApiExternalService employee info response content. response_content={response_content}", content);
+            logger.LogInformation("ApiExternalService employee info retrieved. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+                Activity.Current?.TraceId.ToString(),
+                Activity.Current?.SpanId.ToString(),
+                Activity.Current?.ParentSpanId.ToString(),
+                hostEnvironment.ApplicationName,
+                DateTimeOffset.UtcNow,
+                correlationId);
         }
 
         var response2 = await httpClient2.GetAsync($"/employeestatus/{employeeId}");
         if (response2.IsSuccessStatusCode)
         {
             var content2 = await response2.Content.ReadAsStringAsync();
-            Console.WriteLine($"ApiExternalService response: {content2}");
+            logger.LogInformation("ApiExternalService employee status response content. response_content={response_content}", content2);
+            logger.LogInformation("ApiExternalService employee status retrieved. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+                Activity.Current?.TraceId.ToString(),
+                Activity.Current?.SpanId.ToString(),
+                Activity.Current?.ParentSpanId.ToString(),
+                hostEnvironment.ApplicationName,
+                DateTimeOffset.UtcNow,
+                correlationId);
+        }
+        else
+        {
+            externalServiceCallActivity?.SetStatus(ActivityStatusCode.Error, $"Status code: {response2.StatusCode}");
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Error calling ApiExternalService: {ex.Message}");
+        logger.LogError(ex, "Error calling ApiExternalService. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+            Activity.Current?.TraceId.ToString(),
+            Activity.Current?.SpanId.ToString(),
+            Activity.Current?.ParentSpanId.ToString(),
+            hostEnvironment.ApplicationName,
+            DateTimeOffset.UtcNow,
+            correlationId);
+    }
+
+    var workerTraceParent = Activity.Current?.Id ?? httpContext.Items["traceparent"]?.ToString() ?? string.Empty;
+    var workerTraceState = Activity.Current?.TraceStateString ?? httpContext.Items["tracestate"]?.ToString();
+    var workerClient = httpClientFactory.CreateClient("workerservice1");
+    var job = new WorkerJobMessage(
+        Guid.NewGuid().ToString("N"),
+        workerTraceParent,
+        workerTraceState,
+        correlationId);
+
+    using var workerQueueActivity = activitySource.StartActivity("ApiServiceForecast.QueueWorkerJob", ActivityKind.Producer);
+    var workerResponse = await workerClient.PostAsJsonAsync("/jobs", job);
+    if (!workerResponse.IsSuccessStatusCode)
+    {
+        workerQueueActivity?.SetStatus(ActivityStatusCode.Error, $"Status code: {workerResponse.StatusCode}");
+        logger.LogWarning("Failed to queue worker job. status_code={status_code} trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+            workerResponse.StatusCode,
+            Activity.Current?.TraceId.ToString(),
+            Activity.Current?.SpanId.ToString(),
+            Activity.Current?.ParentSpanId.ToString(),
+            hostEnvironment.ApplicationName,
+            DateTimeOffset.UtcNow,
+            correlationId);
+    }
+    else
+    {
+        var workerResponseContent = await workerResponse.Content.ReadAsStringAsync();
+        logger.LogInformation("Worker job response content. response_content={response_content}", workerResponseContent);
+        logger.LogInformation("Queued worker job {job_id}. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+            job.JobId,
+            Activity.Current?.TraceId.ToString(),
+            Activity.Current?.SpanId.ToString(),
+            Activity.Current?.ParentSpanId.ToString(),
+            hostEnvironment.ApplicationName,
+            DateTimeOffset.UtcNow,
+            correlationId);
     }
 
     var forecast = Enumerable.Range(1, 5).Select(index =>
@@ -96,8 +188,9 @@ app.MapGet("/forecast", async(IHttpClientFactory httpClientFactory) =>
 })
 .WithName("GetForecast");
 
-app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory) =>
+app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory, ILogger<Program> logger, IHostEnvironment hostEnvironment, HttpContext httpContext) =>
 {
+    var correlationId = httpContext.Items["correlation_id"]?.ToString() ?? Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
     var forecast = Enumerable.Range(1, 5).Select(index =>
         new WeatherForecast
         (
@@ -111,16 +204,42 @@ app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory) =>
     var httpClient = httpClientFactory.CreateClient("apierrorservice");
     try
     {
+        using var errorFlowActivity = activitySource.StartActivity("ApiServiceForecast.ErrorFlow", ActivityKind.Internal);
         var response = await httpClient.GetAsync("/err");
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
-            Console.WriteLine($"ApiErrorService response: {content}");
+            logger.LogInformation("Error flow response content from apierrorservice. response_content={response_content}", content);
+            logger.LogInformation("Error flow response received from apierrorservice. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+                Activity.Current?.TraceId.ToString(),
+                Activity.Current?.SpanId.ToString(),
+                Activity.Current?.ParentSpanId.ToString(),
+                hostEnvironment.ApplicationName,
+                DateTimeOffset.UtcNow,
+                correlationId);
+        }
+        else
+        {
+            errorFlowActivity?.SetStatus(ActivityStatusCode.Error, $"Status code: {response.StatusCode}");
+            logger.LogError("Error flow failed in apierrorservice call. status_code={status_code} trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+                response.StatusCode,
+                Activity.Current?.TraceId.ToString(),
+                Activity.Current?.SpanId.ToString(),
+                Activity.Current?.ParentSpanId.ToString(),
+                hostEnvironment.ApplicationName,
+                DateTimeOffset.UtcNow,
+                correlationId);
         }
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Error calling ApiErrorService: {ex.Message}");
+        logger.LogError(ex, "Error flow exception in apierrorservice call. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+            Activity.Current?.TraceId.ToString(),
+            Activity.Current?.SpanId.ToString(),
+            Activity.Current?.ParentSpanId.ToString(),
+            hostEnvironment.ApplicationName,
+            DateTimeOffset.UtcNow,
+            correlationId);
     }
 
     return forecast;
@@ -135,3 +254,12 @@ record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {
     public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
 }
+
+internal sealed record WorkerJobMessage(
+    string JobId,
+    string TraceParent,
+    string? TraceState,
+    string CorrelationId);
+
+public partial class Program;
+public sealed class ApiServiceForecastWebApplicationFactoryEntryPoint;

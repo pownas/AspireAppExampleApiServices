@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ServiceDiscovery;
+using System.Diagnostics;
+using System.Text;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -123,5 +125,65 @@ public static class Extensions
         }
 
         return app;
+    }
+
+    public static IApplicationBuilder UseTraceContextLogScope(this IApplicationBuilder app)
+    {
+        return app.Use(async (context, next) =>
+        {
+            var traceParentHeader = SanitizeLogValue(context.Request.Headers["traceparent"].ToString());
+            var traceParent = !string.IsNullOrWhiteSpace(traceParentHeader) ? traceParentHeader : Activity.Current?.Id;
+            var traceState = SanitizeLogValue(context.Request.Headers["tracestate"].ToString());
+            var correlationId = SanitizeLogValue(context.Request.Headers["X-Correlation-Id"].ToString());
+
+            if (string.IsNullOrWhiteSpace(correlationId))
+            {
+                correlationId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N");
+            }
+
+            context.Items["traceparent"] = traceParent ?? string.Empty;
+            context.Items["tracestate"] = traceState;
+            context.Items["correlation_id"] = correlationId;
+
+            context.Response.Headers["X-Correlation-Id"] = correlationId;
+            if (!string.IsNullOrWhiteSpace(traceParent))
+            {
+                context.Response.Headers["traceparent"] = traceParent;
+            }
+
+            var currentActivity = Activity.Current;
+            var logger = context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("TraceContext");
+
+            using (logger.BeginScope(new Dictionary<string, object?>
+            {
+                ["trace_id"] = currentActivity?.TraceId.ToString(),
+                ["span_id"] = currentActivity?.SpanId.ToString(),
+                ["service.name"] = context.RequestServices.GetRequiredService<IHostEnvironment>().ApplicationName,
+                ["timestamp_utc"] = DateTimeOffset.UtcNow,
+                ["correlation_id"] = correlationId
+            }))
+            {
+                await next();
+            }
+        });
+    }
+
+    private static string SanitizeLogValue(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder(value.Length);
+        foreach (var character in value)
+        {
+            if (!char.IsControl(character))
+            {
+                builder.Append(character);
+            }
+        }
+
+        return builder.ToString();
     }
 }

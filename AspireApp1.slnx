@@ -1,5 +1,6 @@
 <Solution>
   <Project Path=".SolutionItems.csproj" />
+  <Project Path="AspireApp1.ApiErrorService/AspireApp1.ApiErrorService.csproj" />
   <Project Path="AspireApp1.ApiExternalService/AspireApp1.ApiExternalService.csproj" />
   <Project Path="AspireApp1.ApiService/AspireApp1.ApiService.csproj" />
   <Project Path="AspireApp1.ApiServiceForecast/AspireApp1.ApiServiceForecast.csproj" />

@@ -12,12 +12,15 @@
 
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.Testing" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="MessagePack" />
     <PackageReference Include="MSTest" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\AspireApp1.ApiServiceForecast\AspireApp1.ApiServiceForecast.csproj" />
     <ProjectReference Include="..\AspireApp1.AppHost\AspireApp1.AppHost.csproj" />
+    <ProjectReference Include="..\AspireApp1.WorkerService1\AspireApp1.WorkerService1.csproj" />
   </ItemGroup>
 
   <ItemGroup>
