@@ -14,8 +14,9 @@ var apiServiceForecast = builder.AddProject<Projects.AspireApp1_ApiServiceForeca
     .WaitFor(apiService);
 // Add reference to apiServiceForecast, so apiService can call it
 apiService.WithReference(apiServiceForecast);
-// Add reference to apiErrorService, so apiService can call it
+// Add reference to apiErrorService, so apiService and apiServiceForecast can call it
 apiService.WithReference(apiErrorService);
+apiServiceForecast.WithReference(apiErrorService);
 
 var apiServiceExternal = builder.AddProject<Projects.AspireApp1_ApiExternalService>("apiexternalservice")
     .WithHttpHealthCheck("/health")
@@ -54,7 +55,8 @@ builder.AddProject<Projects.AspireApp1_Web>("webfrontend")
 
 var workerService = builder.AddProject<Projects.AspireApp1_WorkerService1>("workerservice1")
     .WithHttpHealthCheck("/health")
-    .WithExternalHttpEndpoints();
+    .WithExternalHttpEndpoints()
+    .WithReference(apiServiceStaticWeather);
 
 apiServiceForecast.WithReference(workerService).WaitFor(workerService);
 
