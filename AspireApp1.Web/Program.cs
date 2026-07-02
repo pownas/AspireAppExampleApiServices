@@ -19,6 +19,13 @@ builder.Services.AddHttpClient<WeatherApiClient>(client =>
         client.BaseAddress = new("https+http://apiservice");
     });
 
+// Register the Aspire Dashboard client used by the proxy endpoints and the ProcessFlow page.
+var aspireDashboardEndpoint = builder.Configuration["AspireDashboard:Endpoint"] ?? "http://localhost:18888";
+builder.Services.AddHttpClient<AspireDashboardClient>(client =>
+{
+    client.BaseAddress = new Uri(aspireDashboardEndpoint);
+});
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -35,6 +42,25 @@ app.UseAntiforgery();
 app.UseOutputCache();
 
 app.MapStaticAssets();
+
+// Proxy API endpoints – forward telemetry requests to the Aspire Dashboard client.
+app.MapGet("/api/traces/{traceId}", async (string traceId, AspireDashboardClient client, CancellationToken ct) =>
+{
+    var trace = await client.GetTraceAsync(traceId, ct);
+    return trace is null ? Results.NotFound() : Results.Ok(trace);
+});
+
+app.MapGet("/api/traces/correlation/{correlationId}", async (string correlationId, AspireDashboardClient client, CancellationToken ct) =>
+{
+    var trace = await client.GetByCorrelationIdAsync(correlationId, ct);
+    return trace is null ? Results.NotFound() : Results.Ok(trace);
+});
+
+app.MapGet("/api/traces/span/{spanId}", async (string spanId, AspireDashboardClient client, CancellationToken ct) =>
+{
+    var trace = await client.GetTraceBySpanIdAsync(spanId, ct);
+    return trace is null ? Results.NotFound() : Results.Ok(trace);
+});
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
