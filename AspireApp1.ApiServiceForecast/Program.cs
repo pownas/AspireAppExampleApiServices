@@ -16,22 +16,22 @@ builder.Services.AddOpenApi();
 // Add HttpClientFactories for calling other services
 builder.Services.AddHttpClient("apiservicestaticweather", client =>
 {
-    client.BaseAddress = new Uri("http://apiservicestaticweather");
+    client.BaseAddress = new Uri("https+http://apiservicestaticweather");
 });
 
 builder.Services.AddHttpClient("apiexternalservice", client =>
 {
-    client.BaseAddress = new Uri("http://apiexternalservice");
+    client.BaseAddress = new Uri("https+http://apiexternalservice");
 });
 
 builder.Services.AddHttpClient("apierrorservice", client =>
 {
-    client.BaseAddress = new Uri("http://apierrorservice");
+    client.BaseAddress = new Uri("https+http://apierrorservice");
 });
 
 builder.Services.AddHttpClient("workerservice1", client =>
 {
-    client.BaseAddress = new Uri("http://workerservice1");
+    client.BaseAddress = new Uri("https+http://workerservice1");
 });
 
 

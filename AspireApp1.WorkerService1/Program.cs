@@ -8,7 +8,7 @@ builder.Services.AddSingleton<WorkerJobQueue>();
 builder.Services.AddHostedService<Worker>();
 builder.Services.AddHttpClient("apiservicestaticweather", client =>
 {
-    client.BaseAddress = new Uri("http://apiservicestaticweather");
+    client.BaseAddress = new Uri("https+http://apiservicestaticweather");
 });
 
 var app = builder.Build();

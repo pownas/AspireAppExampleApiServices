@@ -15,13 +15,13 @@ builder.Services.AddOpenApi();
 // Add HttpClientFactory for calling other apiServiceForecast
 builder.Services.AddHttpClient("apiServiceForecast", client =>
 {
-    client.BaseAddress = new Uri("http://apiServiceForecast");
+    client.BaseAddress = new Uri("https+http://apiServiceForecast");
 });
 
 // Add HttpClientFactory for calling apierrorservice
 builder.Services.AddHttpClient("apierrorservice", client =>
 {
-    client.BaseAddress = new Uri("http://apierrorservice");
+    client.BaseAddress = new Uri("https+http://apierrorservice");
 });
 
 var app = builder.Build();

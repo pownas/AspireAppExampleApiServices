@@ -12,7 +12,7 @@ builder.Services.AddOpenApi();
 // Add HttpClientFactories for calling other services
 builder.Services.AddHttpClient("apiserviceperson", client =>
 {
-    client.BaseAddress = new Uri("http://apiserviceperson");
+    client.BaseAddress = new Uri("https+http://apiserviceperson");
 });
 
 var app = builder.Build();
