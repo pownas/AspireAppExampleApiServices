@@ -1,3 +1,4 @@
+using AspireApp1.StateStore;
 using AspireApp1.Web;
 using AspireApp1.Web.Components;
 
@@ -19,12 +20,11 @@ builder.Services.AddHttpClient<WeatherApiClient>(client =>
         client.BaseAddress = new("https+http://apiservice");
     });
 
-// Register the Aspire Dashboard client used by the proxy endpoints and the ProcessFlow page.
-var aspireDashboardEndpoint = builder.Configuration["AspireDashboard:Endpoint"] ?? "http://localhost:18888";
-builder.Services.AddHttpClient<AspireDashboardClient>(client =>
-{
-    client.BaseAddress = new Uri(aspireDashboardEndpoint);
-});
+// State-store database — used by the TraceQueryService to look up trace data.
+builder.AddNpgsqlDbContext<StateStoreDbContext>("statestore");
+
+// TraceQueryService builds TraceModel objects from state-store records written by the worker services.
+builder.Services.AddScoped<TraceQueryService>();
 
 var app = builder.Build();
 
@@ -43,22 +43,22 @@ app.UseOutputCache();
 
 app.MapStaticAssets();
 
-// Proxy API endpoints – forward telemetry requests to the Aspire Dashboard client.
-app.MapGet("/api/traces/{traceId}", async (string traceId, AspireDashboardClient client, CancellationToken ct) =>
+// Proxy API endpoints — serve trace data from the state store.
+app.MapGet("/api/traces/{traceId}", async (string traceId, TraceQueryService queryService, CancellationToken ct) =>
 {
-    var trace = await client.GetTraceAsync(traceId, ct);
+    var trace = await queryService.GetByTraceIdAsync(traceId, ct);
     return trace is null ? Results.NotFound() : Results.Ok(trace);
 });
 
-app.MapGet("/api/traces/correlation/{correlationId}", async (string correlationId, AspireDashboardClient client, CancellationToken ct) =>
+app.MapGet("/api/traces/correlation/{correlationId}", async (string correlationId, TraceQueryService queryService, CancellationToken ct) =>
 {
-    var trace = await client.GetByCorrelationIdAsync(correlationId, ct);
+    var trace = await queryService.GetByCorrelationIdAsync(correlationId, ct);
     return trace is null ? Results.NotFound() : Results.Ok(trace);
 });
 
-app.MapGet("/api/traces/span/{spanId}", async (string spanId, AspireDashboardClient client, CancellationToken ct) =>
+app.MapGet("/api/traces/span/{spanId}", async (string spanId, TraceQueryService queryService, CancellationToken ct) =>
 {
-    var trace = await client.GetTraceBySpanIdAsync(spanId, ct);
+    var trace = await queryService.GetBySpanIdAsync(spanId, ct);
     return trace is null ? Results.NotFound() : Results.Ok(trace);
 });
 

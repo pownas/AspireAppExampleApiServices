@@ -3,7 +3,7 @@
 
 @using AspireApp1.Web.Models
 @using System.Text.RegularExpressions
-@inject AspireDashboardClient DashboardClient
+@inject TraceQueryService TraceQuery
 @inject ILogger<ProcessFlow> Logger
 
 <PageTitle>Processflöde</PageTitle>
@@ -25,7 +25,7 @@
         </div>
         <div class="col-md-6">
             <label class="form-label fw-semibold">
-                @if (searchType == "traceId") { <text>TraceId (hex, minst 16 tecken)</text> }
+                @if (searchType == "traceId") { <text>TraceId (hex, minst 16 tecken) eller traceparent</text> }
                 else if (searchType == "correlationId") { <text>CorrelationId (GUID eller sträng)</text> }
                 else { <text>SpanId (16 hexadecimala tecken)</text> }
             </label>
@@ -191,13 +191,19 @@ else if (currentTrace is not null)
             return;
         }
 
-        if (searchType == "traceId" && !TraceIdRegex.IsMatch(searchInput.Trim()))
+        var trimmedInput = searchInput.Trim();
+
+        if (searchType == "traceId")
         {
-            validationError = "TraceId måste vara 16–32 hexadecimala tecken.";
-            return;
+            // Accept both a plain traceId AND a full W3C traceparent string
+            if (!TraceIdRegex.IsMatch(trimmedInput) && !TraceParentRegex.IsMatch(trimmedInput))
+            {
+                validationError = "TraceId måste vara 16–32 hexadecimala tecken, eller ett W3C traceparent-värde (00-{traceId}-{spanId}-{flags}).";
+                return;
+            }
         }
 
-        if (searchType == "spanId" && !SpanIdRegex.IsMatch(searchInput.Trim()))
+        if (searchType == "spanId" && !SpanIdRegex.IsMatch(trimmedInput))
         {
             validationError = "SpanId måste vara exakt 16 hexadecimala tecken.";
             return;
@@ -208,9 +214,9 @@ else if (currentTrace is not null)
         {
             TraceModel? trace = searchType switch
             {
-                "traceId" => await DashboardClient.GetTraceAsync(searchInput.Trim()),
-                "correlationId" => await DashboardClient.GetByCorrelationIdAsync(searchInput.Trim()),
-                "spanId" => await DashboardClient.GetTraceBySpanIdAsync(searchInput.Trim()),
+                "traceId" => await TraceQuery.GetByTraceIdAsync(trimmedInput),
+                "correlationId" => await TraceQuery.GetByCorrelationIdAsync(trimmedInput),
+                "spanId" => await TraceQuery.GetBySpanIdAsync(trimmedInput),
                 _ => null
             };
 
@@ -223,15 +229,16 @@ else if (currentTrace is not null)
                 currentTrace = trace;
                 if (searchType == "spanId")
                 {
-                    highlightSpanId = searchInput.Trim().ToLowerInvariant();
+                    highlightSpanId = trimmedInput.ToLowerInvariant();
+                    highlightedSpanIds = [highlightSpanId];
+                }
+                else if (searchType == "traceId" && TraceQueryService.TryParseTraceParent(trimmedInput, out _, out var extractedSpanId))
+                {
+                    // When searching by traceparent, highlight the span matching the embedded spanId
+                    highlightSpanId = extractedSpanId;
                     highlightedSpanIds = [highlightSpanId];
                 }
             }
-        }
-        catch (HttpRequestException ex)
-        {
-            Logger.LogWarning(ex, "HTTP error while searching for trace. SearchType={SearchType} Input={Input}", searchType, searchInput);
-            notFound = true;
         }
         catch (Exception ex)
         {
@@ -434,4 +441,5 @@ else if (currentTrace is not null)
 
     private static readonly Regex TraceIdRegex = new(@"^[0-9a-fA-F]{16,32}$", RegexOptions.Compiled);
     private static readonly Regex SpanIdRegex = new(@"^[0-9a-fA-F]{16}$", RegexOptions.Compiled);
+    private static readonly Regex TraceParentRegex = new(@"^00-[0-9a-fA-F]{32}-[0-9a-fA-F]{16}-[0-9a-fA-F]{2}$", RegexOptions.Compiled);
 }
