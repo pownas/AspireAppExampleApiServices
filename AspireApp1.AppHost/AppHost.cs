@@ -65,14 +65,14 @@ var workerService2 = builder.AddProject<Projects.AspireApp1_WorkerService2>("wor
     .WithExternalHttpEndpoints()
     .WithReference(apiServiceStaticWeather);
 
-apiServiceForecast.WithReference(workerService2).WaitFor(workerService2);
+workerService1.WithReference(workerService2).WaitFor(workerService2);
 
 var workerService3 = builder.AddProject<Projects.AspireApp1_WorkerService3>("workerservice3")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints()
     .WithReference(apiServiceStaticWeather);
 
-apiServiceForecast.WithReference(workerService3).WaitFor(workerService3);
+workerService2.WithReference(workerService3).WaitFor(workerService3);
 
 var workerService4 = builder.AddProject<Projects.AspireApp1_WorkerService4>("workerservice4")
     .WithHttpHealthCheck("/health")
