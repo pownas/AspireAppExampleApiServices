@@ -1,102 +1,95 @@
-﻿namespace AspireApp1.WorkerService1;
+namespace AspireApp1.WorkerService4;
 
 using System.Diagnostics;
+using System.Net;
 
-public class Worker(
-    ILogger<Worker> logger,
+/// <summary>
+/// Periodically polls the health endpoints of WorkerService1, WorkerService2, and WorkerService3
+/// and logs their reported status so that status trends are visible in the Aspire dashboard.
+/// </summary>
+public class StatusMonitor(
+    ILogger<StatusMonitor> logger,
     IHttpClientFactory httpClientFactory,
-    WorkerJobQueue jobQueue,
     IHostEnvironment hostEnvironment) : BackgroundService
 {
-    private static readonly ActivitySource activitySource = new("AspireApp1.WorkerService1");
-    private const int MaxRetryAttempts = 3;
+    private static readonly ActivitySource activitySource = new("AspireApp1.WorkerService4");
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
+    private static readonly string[] MonitoredServices = ["workerservice1", "workerservice2", "workerservice3"];
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var job in jobQueue.DequeueAllAsync(stoppingToken))
+        // Short initial delay to allow dependent services to start
+        await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await ProcessJobWithRetryAsync(job, stoppingToken);
+            await PollStatusAsync(stoppingToken);
+            await Task.Delay(PollInterval, stoppingToken);
         }
     }
 
-    private async Task ProcessJobWithRetryAsync(WorkerJobMessage job, CancellationToken stoppingToken)
+    private async Task PollStatusAsync(CancellationToken stoppingToken)
     {
-        if (!WorkerTraceContext.TryParse(job.TraceParent, job.TraceState, out var parentContext))
+        using var pollActivity = activitySource.StartActivity("StatusMonitor.Poll", ActivityKind.Client);
+        pollActivity?.SetTag("service.name", hostEnvironment.ApplicationName);
+
+        logger.LogInformation("StatusMonitor polling worker services. service.name={service_name} timestamp_utc={timestamp_utc}",
+            hostEnvironment.ApplicationName,
+            DateTimeOffset.UtcNow);
+
+        foreach (var serviceName in MonitoredServices)
         {
-            logger.LogWarning("Invalid trace context for worker job {job_id}. traceparent={traceparent} correlation_id={correlation_id}",
-                job.JobId,
-                job.TraceParent,
-                job.CorrelationId);
-            return;
+            await CheckServiceStatusAsync(serviceName, stoppingToken);
         }
+    }
 
-        for (var retryAttempt = 1; retryAttempt <= MaxRetryAttempts; retryAttempt++)
+    private async Task CheckServiceStatusAsync(string serviceName, CancellationToken stoppingToken)
+    {
+        using var checkActivity = activitySource.StartActivity($"StatusMonitor.Check.{serviceName}", ActivityKind.Client);
+
+        try
         {
-            using var activity = activitySource.StartActivity("Worker.ProcessJob", ActivityKind.Consumer, parentContext);
-            activity?.SetTag("job.id", job.JobId);
-            activity?.SetTag("retry.attempt", retryAttempt);
-            activity?.SetTag("service.name", hostEnvironment.ApplicationName);
+            var httpClient = httpClientFactory.CreateClient(serviceName);
+            var response = await httpClient.GetAsync("/health", stoppingToken);
+            var statusCode = (int)response.StatusCode;
+            var isHealthy = response.IsSuccessStatusCode;
 
-            try
+            checkActivity?.SetTag("http.status_code", statusCode);
+            checkActivity?.SetTag("monitored.service", serviceName);
+
+            if (isHealthy)
             {
-                logger.LogInformation("Worker processing job {job_id}. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id} retry_attempt={retry_attempt}",
-                    job.JobId,
-                    Activity.Current?.TraceId.ToString(),
-                    Activity.Current?.SpanId.ToString(),
-                    Activity.Current?.ParentSpanId.ToString(),
+                logger.LogInformation("StatusMonitor: {monitored_service} is healthy. status_code={status_code} service.name={service_name} timestamp_utc={timestamp_utc}",
+                    serviceName,
+                    statusCode,
                     hostEnvironment.ApplicationName,
-                    DateTimeOffset.UtcNow,
-                    job.CorrelationId,
-                    retryAttempt);
-
-                using var downstreamActivity = activitySource.StartActivity("Worker.CallStaticWeather", ActivityKind.Client);
-                var httpClient = httpClientFactory.CreateClient("apiservicestaticweather");
-                var response = await httpClient.GetAsync("/infoweather", stoppingToken);
-                if (!response.IsSuccessStatusCode)
-                {
-                    downstreamActivity?.SetStatus(ActivityStatusCode.Error, $"Status code: {response.StatusCode}");
-                }
-                response.EnsureSuccessStatusCode();
-
-                logger.LogInformation("Worker completed job {job_id}. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id} retry_attempt={retry_attempt}",
-                    job.JobId,
-                    Activity.Current?.TraceId.ToString(),
-                    Activity.Current?.SpanId.ToString(),
-                    Activity.Current?.ParentSpanId.ToString(),
-                    hostEnvironment.ApplicationName,
-                    DateTimeOffset.UtcNow,
-                    job.CorrelationId,
-                    retryAttempt);
-
-                return;
+                    DateTimeOffset.UtcNow);
             }
-            catch (Exception ex) when (retryAttempt < MaxRetryAttempts)
+            else
             {
-                logger.LogWarning(ex, "Worker retry for job {job_id}. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id} retry_attempt={retry_attempt}",
-                    job.JobId,
-                    Activity.Current?.TraceId.ToString(),
-                    Activity.Current?.SpanId.ToString(),
-                    Activity.Current?.ParentSpanId.ToString(),
+                checkActivity?.SetStatus(ActivityStatusCode.Error, $"Unhealthy status: {statusCode}");
+                logger.LogWarning("StatusMonitor: {monitored_service} is unhealthy. status_code={status_code} service.name={service_name} timestamp_utc={timestamp_utc}",
+                    serviceName,
+                    statusCode,
                     hostEnvironment.ApplicationName,
-                    DateTimeOffset.UtcNow,
-                    job.CorrelationId,
-                    retryAttempt);
-
-                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, retryAttempt - 1)), stoppingToken);
+                    DateTimeOffset.UtcNow);
             }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Worker final failure (dead-letter) for job {job_id}. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id} retry_attempts={retry_attempts}",
-                    job.JobId,
-                    Activity.Current?.TraceId.ToString(),
-                    Activity.Current?.SpanId.ToString(),
-                    Activity.Current?.ParentSpanId.ToString(),
-                    hostEnvironment.ApplicationName,
-                    DateTimeOffset.UtcNow,
-                    job.CorrelationId,
-                    retryAttempt);
-                return;
-            }
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.ServiceUnavailable)
+        {
+            checkActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            logger.LogWarning(ex, "StatusMonitor: {monitored_service} returned ServiceUnavailable. service.name={service_name} timestamp_utc={timestamp_utc}",
+                serviceName,
+                hostEnvironment.ApplicationName,
+                DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            checkActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            logger.LogError(ex, "StatusMonitor: failed to reach {monitored_service}. service.name={service_name} timestamp_utc={timestamp_utc}",
+                serviceName,
+                hostEnvironment.ApplicationName,
+                DateTimeOffset.UtcNow);
         }
     }
 }

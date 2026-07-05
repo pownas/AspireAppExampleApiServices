@@ -1,4 +1,4 @@
-﻿using AspireApp1.WorkerService1;
+using AspireApp1.WorkerService2;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,6 +9,10 @@ builder.Services.AddHostedService<Worker>();
 builder.Services.AddHttpClient("apiservicestaticweather", client =>
 {
     client.BaseAddress = new Uri("https+http://apiservicestaticweather");
+});
+builder.Services.AddHttpClient("workerservice3", client =>
+{
+    client.BaseAddress = new Uri("https+http://workerservice3");
 });
 
 var app = builder.Build();

@@ -1,4 +1,4 @@
-namespace AspireApp1.WorkerService1;
+namespace AspireApp1.WorkerService2;
 
 public sealed record WorkerJobMessage(
     string JobId,

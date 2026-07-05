@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 
-namespace AspireApp1.WorkerService1;
+namespace AspireApp1.WorkerService2;
 
 public sealed class WorkerJobQueue
 {

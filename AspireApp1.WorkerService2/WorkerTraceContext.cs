@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace AspireApp1.WorkerService1;
+namespace AspireApp1.WorkerService2;
 
 public static class WorkerTraceContext
 {

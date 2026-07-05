@@ -1,4 +1,4 @@
-﻿namespace AspireApp1.WorkerService1;
+namespace AspireApp1.WorkerService3;
 
 using System.Diagnostics;
 
@@ -8,7 +8,7 @@ public class Worker(
     WorkerJobQueue jobQueue,
     IHostEnvironment hostEnvironment) : BackgroundService
 {
-    private static readonly ActivitySource activitySource = new("AspireApp1.WorkerService1");
+    private static readonly ActivitySource activitySource = new("AspireApp1.WorkerService3");
     private const int MaxRetryAttempts = 3;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

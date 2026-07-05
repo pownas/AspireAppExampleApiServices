@@ -6,9 +6,18 @@ builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
 builder.Services.AddSingleton<WorkerJobQueue>();
 builder.Services.AddHostedService<Worker>();
+builder.Services.AddHostedService<PeriodicChainTrigger>();
 builder.Services.AddHttpClient("apiservicestaticweather", client =>
 {
     client.BaseAddress = new Uri("https+http://apiservicestaticweather");
+});
+builder.Services.AddHttpClient("workerservice2", client =>
+{
+    client.BaseAddress = new Uri("https+http://workerservice2");
+});
+builder.Services.AddHttpClient("workerservice3", client =>
+{
+    client.BaseAddress = new Uri("https+http://workerservice3");
 });
 
 var app = builder.Build();
