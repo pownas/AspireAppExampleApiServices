@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -163,7 +163,16 @@ public static class Extensions
                 ["correlation_id"] = correlationId
             }))
             {
-                await next();
+                try
+                {
+                    await next();
+                }
+                catch (OperationCanceledException ex)
+                {
+                    // Request was cancelled; this is normal for health checks and timeouts
+                    // Continue gracefully without rethrowing
+                    logger.LogInformation(ex, "Request was cancelled; this is normal for health checks and timeouts... Continue gracefully without rethrowing...");
+                }
             }
         });
     }
