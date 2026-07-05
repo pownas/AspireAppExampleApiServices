@@ -7,7 +7,8 @@ namespace AspireApp1.Web;
 
 /// <summary>
 /// Builds <see cref="TraceModel"/> objects from the distributed-state-store records
-/// (job states, chain runs, service health) written by the worker services.
+/// (job states, chain runs, service health, flow runs, flow steps, span records)
+/// written by the worker and API services.
 /// Supports lookup by traceId, W3C traceparent string, correlationId, and spanId.
 /// </summary>
 public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService> logger)
@@ -47,11 +48,28 @@ public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService
             .OrderBy(h => h.CheckedAt)
             .ToListAsync(cancellationToken);
 
-        logger.LogInformation(
-            "TraceQuery by traceId={TraceId}: jobs={JobCount} chainRuns={ChainCount} healthRecords={HealthCount}",
-            normalizedId, jobs.Count, chainRuns.Count, healthRecords.Count);
+        var flowSteps = await db.FlowStepRecords
+            .Where(s => s.TraceId != null && s.TraceId.ToLower() == normalizedId)
+            .OrderBy(s => s.StepOrder)
+            .ToListAsync(cancellationToken);
 
-        return BuildTraceModel(normalizedId, null, jobs, chainRuns, healthRecords);
+        var flowRunIds = flowSteps.Select(s => s.FlowRunId).Distinct().ToList();
+        var flowRuns = flowRunIds.Count > 0
+            ? await db.FlowRunRecords
+                .Where(r => flowRunIds.Contains(r.FlowRunId))
+                .ToListAsync(cancellationToken)
+            : [];
+
+        var spanRecords = await db.SpanRecords
+            .Where(s => s.TraceId != null && s.TraceId.ToLower() == normalizedId)
+            .OrderBy(s => s.StartTime)
+            .ToListAsync(cancellationToken);
+
+        logger.LogInformation(
+            "TraceQuery by traceId={TraceId}: jobs={JobCount} chainRuns={ChainCount} healthRecords={HealthCount} flowRuns={FlowRunCount} flowSteps={FlowStepCount} spanRecords={SpanCount}",
+            normalizedId, jobs.Count, chainRuns.Count, healthRecords.Count, flowRuns.Count, flowSteps.Count, spanRecords.Count);
+
+        return BuildTraceModel(normalizedId, null, jobs, chainRuns, healthRecords, flowRuns, flowSteps, spanRecords);
     }
 
     /// <summary>
@@ -71,11 +89,24 @@ public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService
             .OrderBy(c => c.StartedAt)
             .ToListAsync(cancellationToken);
 
-        logger.LogInformation(
-            "TraceQuery by correlationId={CorrelationId}: jobs={JobCount} chainRuns={ChainCount}",
-            normalizedId, jobs.Count, chainRuns.Count);
+        var flowRuns = await db.FlowRunRecords
+            .Where(r => r.CorrelationId == normalizedId)
+            .OrderBy(r => r.StartedAt)
+            .ToListAsync(cancellationToken);
 
-        if (jobs.Count == 0 && chainRuns.Count == 0)
+        var flowRunIds = flowRuns.Select(r => r.FlowRunId).ToList();
+        var flowSteps = flowRunIds.Count > 0
+            ? await db.FlowStepRecords
+                .Where(s => flowRunIds.Contains(s.FlowRunId))
+                .OrderBy(s => s.StepOrder)
+                .ToListAsync(cancellationToken)
+            : [];
+
+        logger.LogInformation(
+            "TraceQuery by correlationId={CorrelationId}: jobs={JobCount} chainRuns={ChainCount} flowRuns={FlowRunCount}",
+            normalizedId, jobs.Count, chainRuns.Count, flowRuns.Count);
+
+        if (jobs.Count == 0 && chainRuns.Count == 0 && flowRuns.Count == 0)
         {
             return null;
         }
@@ -83,15 +114,21 @@ public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService
         // Use the first available traceId from the matched records
         var traceId = jobs.FirstOrDefault(j => j.TraceId is not null)?.TraceId
             ?? chainRuns.FirstOrDefault(c => c.TraceId is not null)?.TraceId
+            ?? flowRuns.FirstOrDefault(r => r.TraceId is not null)?.TraceId
             ?? normalizedId;
 
-        // Also load any health records for the same traceId
+        // Also load any health records and span records for the same traceId
         var healthRecords = await db.ServiceHealthRecords
             .Where(h => h.TraceId != null && h.TraceId.ToLower() == traceId.ToLower())
             .OrderBy(h => h.CheckedAt)
             .ToListAsync(cancellationToken);
 
-        return BuildTraceModel(traceId, normalizedId, jobs, chainRuns, healthRecords);
+        var spanRecords = await db.SpanRecords
+            .Where(s => s.TraceId != null && s.TraceId.ToLower() == traceId.ToLower())
+            .OrderBy(s => s.StartTime)
+            .ToListAsync(cancellationToken);
+
+        return BuildTraceModel(traceId, normalizedId, jobs, chainRuns, healthRecords, flowRuns, flowSteps, spanRecords);
     }
 
     /// <summary>
@@ -101,23 +138,28 @@ public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService
     {
         var normalizedId = spanId.Trim().ToLowerInvariant();
 
+        // Check job states first
         var job = await db.JobStates
             .Where(j => j.SpanId != null && j.SpanId.ToLower() == normalizedId)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (job is null)
+        if (job?.TraceId is not null)
         {
-            logger.LogInformation("TraceQuery by spanId={SpanId}: no job found", normalizedId);
-            return null;
+            return await GetByTraceIdAsync(job.TraceId, cancellationToken);
         }
 
-        if (job.TraceId is null)
+        // Check flow step records
+        var flowStep = await db.FlowStepRecords
+            .Where(s => s.SpanId != null && s.SpanId.ToLower() == normalizedId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (flowStep?.TraceId is not null)
         {
-            logger.LogInformation("TraceQuery by spanId={SpanId}: job found but no traceId", normalizedId);
-            return null;
+            return await GetByTraceIdAsync(flowStep.TraceId, cancellationToken);
         }
 
-        return await GetByTraceIdAsync(job.TraceId, cancellationToken);
+        logger.LogInformation("TraceQuery by spanId={SpanId}: no matching record found", normalizedId);
+        return null;
     }
 
     /// <summary>
@@ -143,9 +185,13 @@ public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService
         string? correlationId,
         List<JobStateRecord> jobs,
         List<ChainRunRecord> chainRuns,
-        List<ServiceHealthRecord> healthRecords)
+        List<ServiceHealthRecord> healthRecords,
+        List<FlowRunRecord> flowRuns,
+        List<FlowStepRecord> flowSteps,
+        List<SpanRecord> spanRecords)
     {
-        if (jobs.Count == 0 && chainRuns.Count == 0 && healthRecords.Count == 0)
+        if (jobs.Count == 0 && chainRuns.Count == 0 && healthRecords.Count == 0
+            && flowRuns.Count == 0 && flowSteps.Count == 0 && spanRecords.Count == 0)
         {
             return null;
         }
@@ -237,6 +283,105 @@ public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService
             });
         }
 
+        // FlowRun records become root spans; FlowStep records become their children
+        foreach (var flowRun in flowRuns)
+        {
+            var flowRunDuration = flowRun.CompletedAt.HasValue
+                ? flowRun.CompletedAt.Value - flowRun.StartedAt
+                : (TimeSpan?)null;
+
+            var flowRunStatus = flowRun.Status switch
+            {
+                FlowRunStatus.Completed => SpanStatus.OK,
+                FlowRunStatus.Failed => SpanStatus.Error,
+                FlowRunStatus.Running => SpanStatus.InProgress,
+                _ => SpanStatus.Unknown
+            };
+
+            spans.Add(new SpanModel
+            {
+                SpanId = flowRun.FlowRunId,
+                ParentSpanId = null,
+                ServiceName = "AspireApp1.WorkerService1",
+                OperationName = $"FlowRun.{flowRun.FlowName}",
+                StartTime = flowRun.StartedAt,
+                Duration = flowRunDuration,
+                Status = flowRunStatus,
+                ErrorMessage = flowRun.ErrorMessage,
+                LogEntries = [
+                    new LogEntryModel
+                    {
+                        Timestamp = flowRun.StartedAt,
+                        Level = "Information",
+                        Message = $"Flow '{flowRun.FlowName}' started. correlation.id={flowRun.CorrelationId}",
+                        Attributes = new Dictionary<string, string>
+                        {
+                            ["flow.run.id"] = flowRun.FlowRunId,
+                            ["correlation.id"] = flowRun.CorrelationId,
+                        }
+                    }
+                ]
+            });
+        }
+
+        // FlowStep records become child spans under their FlowRun
+        foreach (var step in flowSteps)
+        {
+            var stepDuration = step.CompletedAt.HasValue && step.StartedAt.HasValue
+                ? step.CompletedAt.Value - step.StartedAt.Value
+                : (TimeSpan?)null;
+
+            var stepStatus = step.Status switch
+            {
+                FlowStepStatus.Completed => SpanStatus.OK,
+                FlowStepStatus.Failed => SpanStatus.Error,
+                FlowStepStatus.Running => SpanStatus.InProgress,
+                FlowStepStatus.Pending => SpanStatus.InProgress,
+                _ => SpanStatus.Unknown
+            };
+
+            spans.Add(new SpanModel
+            {
+                SpanId = step.SpanId ?? $"{step.FlowRunId}_{step.StepOrder}",
+                ParentSpanId = step.FlowRunId,
+                ServiceName = step.ServiceName,
+                OperationName = step.StepName,
+                StartTime = step.StartedAt ?? DateTimeOffset.UtcNow,
+                Duration = stepDuration,
+                Status = stepStatus,
+                ErrorMessage = step.ErrorMessage
+            });
+        }
+
+        // SpanRecords from API services (e.g. ApiServiceForecast) with proper parent-child relationships
+        foreach (var spanRec in spanRecords)
+        {
+            var spanDuration = spanRec.EndTime.HasValue
+                ? spanRec.EndTime.Value - spanRec.StartTime
+                : (TimeSpan?)null;
+
+            var spanStatus = spanRec.Status switch
+            {
+                SpanRecordStatus.Error => SpanStatus.Error,
+                SpanRecordStatus.Warning => SpanStatus.Warning,
+                SpanRecordStatus.OK => SpanStatus.OK,
+                _ => SpanStatus.Unknown
+            };
+
+            spans.Add(new SpanModel
+            {
+                SpanId = spanRec.SpanId,
+                ParentSpanId = spanRec.ParentSpanId,
+                ServiceName = spanRec.ServiceName,
+                OperationName = spanRec.OperationName,
+                StartTime = spanRec.StartTime,
+                Duration = spanDuration,
+                Status = spanStatus,
+                ErrorMessage = spanRec.ErrorMessage,
+                HttpStatusCode = spanRec.HttpStatusCode
+            });
+        }
+
         // Derive overall trace status
         var overallStatus = spans.Any(s => s.Status == SpanStatus.Error)
             ? SpanStatus.Error
@@ -251,7 +396,8 @@ public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService
             TraceId = traceId,
             CorrelationId = correlationId
                 ?? jobs.FirstOrDefault()?.CorrelationId
-                ?? chainRuns.FirstOrDefault()?.CorrelationId,
+                ?? chainRuns.FirstOrDefault()?.CorrelationId
+                ?? flowRuns.FirstOrDefault()?.CorrelationId,
             OverallStatus = overallStatus,
             Spans = spans,
             StartTime = spans.Count > 0 ? spans.Min(s => s.StartTime) : DateTimeOffset.UtcNow

@@ -1,0 +1,297 @@
+@page "/flowdemo"
+@rendermode InteractiveServer
+@implements IDisposable
+@using System.Net.Http.Json
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@inject IHttpClientFactory HttpClientFactory
+@inject ILogger<FlowDemo> Logger
+
+<PageTitle>Flödesutlösare</PageTitle>
+
+<h1>Flödesutlösare</h1>
+<p>Utlös ett flöde som passerar synkront och asynkront genom WorkerService&nbsp;1, 2 och 3. Statusen uppdateras live medan varje steg fortskrider.</p>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="StartFlow" disabled="@(_isRunning || _isPolling)">
+        @if (_isRunning)
+        {
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            <span>Startar...</span>
+        }
+        else
+        {
+            <span class="bi bi-play-circle-fill me-1" aria-hidden="true"></span>
+            <span>Starta flöde</span>
+        }
+    </button>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="alert alert-danger">@_errorMessage</div>
+}
+
+@if (_flowRunId is not null)
+{
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><strong>Flödeskörning</strong></span>
+            <span class="badge @GetStatusBadgeClass(_flowStatus)">@_flowStatus</span>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Flow Run ID</dt>
+                <dd class="col-sm-9 font-monospace small">@_flowRunId</dd>
+                @if (_correlationId is not null)
+                {
+                    <dt class="col-sm-3">Correlation ID</dt>
+                    <dd class="col-sm-9 font-monospace small">@_correlationId</dd>
+                }
+                @if (_traceId is not null)
+                {
+                    <dt class="col-sm-3">Trace ID</dt>
+                    <dd class="col-sm-9 font-monospace small">@_traceId</dd>
+                }
+            </dl>
+        </div>
+    </div>
+
+    @if (_steps.Count > 0)
+    {
+        <table class="table table-sm table-bordered">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>Steg</th>
+                    <th>Tjänst</th>
+                    <th>Status</th>
+                    <th>Varaktighet</th>
+                    <th>Fel</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var step in _steps)
+                {
+                    <tr class="@GetStepRowClass(step.Status)">
+                        <td>@step.StepOrder</td>
+                        <td>@step.StepName</td>
+                        <td>@step.ServiceName</td>
+                        <td>
+                            <span>@GetStatusEmoji(step.Status)</span>
+                            <span>@step.Status</span>
+                        </td>
+                        <td>@FormatDuration(step.StartedAt, step.CompletedAt)</td>
+                        <td class="text-danger small">@step.ErrorMessage</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @if (_isPolling)
+    {
+        <div class="text-muted small">
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            Hämtar status...
+        </div>
+    }
+
+    @if (_flowStatus is "Completed" or "Failed")
+    {
+        <div class="mt-3">
+            @if (_correlationId is not null)
+            {
+                <a class="btn btn-outline-primary btn-sm me-2"
+                   href="/processflow?correlationId=@Uri.EscapeDataString(_correlationId)">
+                    <span class="bi bi-diagram-3-fill me-1" aria-hidden="true"></span>
+                    Visa i Processflöde (Correlation ID)
+                </a>
+            }
+            @if (_traceId is not null)
+            {
+                <a class="btn btn-outline-secondary btn-sm"
+                   href="/processflow?traceId=@Uri.EscapeDataString(_traceId)">
+                    <span class="bi bi-diagram-3-fill me-1" aria-hidden="true"></span>
+                    Visa i Processflöde (Trace ID)
+                </a>
+            }
+        </div>
+    }
+}
+
+@code {
+    private bool _isRunning;
+    private bool _isPolling;
+    private string? _flowRunId;
+    private string? _correlationId;
+    private string? _traceId;
+    private string? _flowStatus;
+    private string? _errorMessage;
+    private List<FlowStepDto> _steps = [];
+
+    private System.Threading.Timer? _pollTimer;
+
+    private async Task StartFlow()
+    {
+        _isRunning = true;
+        _errorMessage = null;
+        _flowRunId = null;
+        _correlationId = null;
+        _traceId = null;
+        _flowStatus = null;
+        _steps = [];
+
+        try
+        {
+            var client = HttpClientFactory.CreateClient("workerservice1");
+            // Use the Web frontend's own proxy endpoint to avoid CORS / direct WS1 access
+            var http = HttpClientFactory.CreateClient();
+            var resp = await http.PostAsync("/api/flow/start", content: null);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _errorMessage = $"Kunde inte starta flöde: HTTP {(int)resp.StatusCode}";
+                return;
+            }
+
+            using var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>();
+            if (doc is null)
+            {
+                _errorMessage = "Ogiltigt svar från flödesstart.";
+                return;
+            }
+
+            var root = doc.RootElement;
+            _flowRunId = root.TryGetProperty("flowRunId", out var fid) ? fid.GetString() : null;
+            _correlationId = root.TryGetProperty("correlationId", out var cid) ? cid.GetString() : null;
+            _traceId = root.TryGetProperty("traceId", out var tid) ? tid.GetString() : null;
+            _flowStatus = "Running";
+
+            if (_flowRunId is not null)
+            {
+                StartPolling();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error starting flow");
+            _errorMessage = $"Fel: {ex.Message}";
+        }
+        finally
+        {
+            _isRunning = false;
+        }
+    }
+
+    private void StartPolling()
+    {
+        _isPolling = true;
+        _pollTimer?.Dispose();
+        _pollTimer = new System.Threading.Timer(
+            _ => InvokeAsync(PollStatus),
+            state: null,
+            dueTime: TimeSpan.FromSeconds(1),
+            period: TimeSpan.FromSeconds(2));
+    }
+
+    private async Task PollStatus()
+    {
+        if (_flowRunId is null) return;
+
+        try
+        {
+            var http = HttpClientFactory.CreateClient();
+            var resp = await http.GetAsync($"/api/flow/{_flowRunId}/status");
+            if (!resp.IsSuccessStatusCode) return;
+
+            using var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>();
+            if (doc is null) return;
+
+            var root = doc.RootElement;
+            _flowStatus = root.TryGetProperty("status", out var s) ? s.GetString() : _flowStatus;
+
+            if (root.TryGetProperty("steps", out var stepsEl))
+            {
+                _steps = [];
+                foreach (var stepEl in stepsEl.EnumerateArray())
+                {
+                    _steps.Add(new FlowStepDto
+                    {
+                        StepName = stepEl.TryGetProperty("stepName", out var n) ? n.GetString() ?? "" : "",
+                        ServiceName = stepEl.TryGetProperty("serviceName", out var svc) ? svc.GetString() ?? "" : "",
+                        StepOrder = stepEl.TryGetProperty("stepOrder", out var ord) ? ord.GetInt32() : 0,
+                        Status = stepEl.TryGetProperty("status", out var st) ? st.GetString() ?? "" : "",
+                        StartedAt = stepEl.TryGetProperty("startedAt", out var sta) && sta.ValueKind != JsonValueKind.Null
+                            ? sta.GetDateTimeOffset() : (DateTimeOffset?)null,
+                        CompletedAt = stepEl.TryGetProperty("completedAt", out var cmp) && cmp.ValueKind != JsonValueKind.Null
+                            ? cmp.GetDateTimeOffset() : (DateTimeOffset?)null,
+                        ErrorMessage = stepEl.TryGetProperty("errorMessage", out var err) && err.ValueKind != JsonValueKind.Null
+                            ? err.GetString() : null,
+                    });
+                }
+            }
+
+            if (_flowStatus is "Completed" or "Failed")
+            {
+                _isPolling = false;
+                _pollTimer?.Dispose();
+                _pollTimer = null;
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error polling flow status");
+        }
+    }
+
+    private static string GetStatusEmoji(string? status) => status switch
+    {
+        "Completed" => "✅",
+        "Failed" => "❌",
+        "Running" => "🔄",
+        "Pending" => "⏳",
+        _ => "❓"
+    };
+
+    private static string GetStatusBadgeClass(string? status) => status switch
+    {
+        "Completed" => "bg-success",
+        "Failed" => "bg-danger",
+        "Running" => "bg-primary",
+        _ => "bg-secondary"
+    };
+
+    private static string GetStepRowClass(string? status) => status switch
+    {
+        "Failed" => "table-danger",
+        "Running" => "table-primary",
+        "Completed" => "table-success",
+        _ => ""
+    };
+
+    private static string FormatDuration(DateTimeOffset? start, DateTimeOffset? end)
+    {
+        if (start is null) return "–";
+        if (end is null) return "pågår…";
+        var d = end.Value - start.Value;
+        return d.TotalSeconds >= 1 ? $"{d.TotalSeconds:F1}s" : $"{d.TotalMilliseconds:F0}ms";
+    }
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+    }
+
+    private record FlowStepDto
+    {
+        public string StepName { get; init; } = "";
+        public string ServiceName { get; init; } = "";
+        public int StepOrder { get; init; }
+        public string Status { get; init; } = "";
+        public DateTimeOffset? StartedAt { get; init; }
+        public DateTimeOffset? CompletedAt { get; init; }
+        public string? ErrorMessage { get; init; }
+    }
+}

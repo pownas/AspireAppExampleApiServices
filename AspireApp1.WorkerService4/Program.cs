@@ -29,7 +29,7 @@ app.UseTraceContextLogScope();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<StateStoreDbContext>();
-    await db.Database.EnsureCreatedAsync();
+    await DatabaseInitializer.EnsureSchemaAsync(db);
 }
 
 app.MapDefaultEndpoints();

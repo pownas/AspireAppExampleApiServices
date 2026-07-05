@@ -1,7 +1,9 @@
 using System.Net;
 using System.Diagnostics;
 using System.Text.Json;
+using AspireApp1.StateStore;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -103,6 +105,21 @@ public class TraceFlowWebApplicationFactoryTests
             {
                 builder.ConfigureServices(services =>
                 {
+                    // Remove ALL service registrations related to StateStoreDbContext
+                    // (AddNpgsqlDbContext registers a singleton IDbContextPool in addition
+                    // to the DbContext and DbContextOptions, so we must clear them all).
+                    var toRemove = services
+                        .Where(d => d.ServiceType.FullName?.Contains("StateStoreDbContext") == true
+                                 || (d.ServiceType.IsGenericType &&
+                                     d.ServiceType.GetGenericArguments()
+                                         .Any(a => a == typeof(AspireApp1.StateStore.StateStoreDbContext))))
+                        .ToList();
+                    foreach (var descriptor in toRemove)
+                        services.Remove(descriptor);
+
+                    services.AddDbContext<AspireApp1.StateStore.StateStoreDbContext>(options =>
+                        options.UseInMemoryDatabase($"TestDb_{Guid.NewGuid()}"));
+
                     services.RemoveAll<IHttpClientFactory>();
                     services.AddSingleton<IHttpClientFactory>(new FakeHttpClientFactory(CreateFakeClients(
                         staticWeatherRequests,

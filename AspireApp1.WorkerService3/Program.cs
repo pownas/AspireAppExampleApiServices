@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using AspireApp1.StateStore;
 using AspireApp1.WorkerService3;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,8 +24,10 @@ app.UseTraceContextLogScope();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<StateStoreDbContext>();
-    await db.Database.EnsureCreatedAsync();
+    await DatabaseInitializer.EnsureSchemaAsync(db);
 }
+
+var flowActivitySource = new ActivitySource("AspireApp1.WorkerService3.Flow");
 
 app.MapPost("/jobs", async (WorkerJobMessage message, WorkerJobQueue queue, ILogger<Program> logger, IHostEnvironment hostEnvironment, HttpContext httpContext) =>
 {
@@ -54,9 +58,153 @@ app.MapPost("/jobs", async (WorkerJobMessage message, WorkerJobQueue queue, ILog
     return Results.Accepted($"/jobs/{message.JobId}");
 });
 
+// ── Flow step endpoint (Step 3) ────────────────────────────────────────────
+// Accepts a flow step message, responds 202 immediately, and processes async.
+app.MapPost("/flow/step", (
+    FlowStepMessage message,
+    IServiceScopeFactory scopeFactory,
+    IHttpClientFactory httpClientFactory,
+    ILogger<Program> logger,
+    IHostEnvironment hostEnvironment) =>
+{
+    var capturedTraceParent = Activity.Current?.Id ?? message.TraceParent;
+    var capturedTraceState = Activity.Current?.TraceStateString ?? message.TraceState;
+
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            await ExecuteStep3Async(message, capturedTraceParent, capturedTraceState,
+                scopeFactory, httpClientFactory, logger, hostEnvironment, flowActivitySource);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Flow step 3 background task failed. flow_run_id={flow_run_id}", message.FlowRunId);
+        }
+    });
+
+    return Results.Accepted();
+});
+
 app.MapDefaultEndpoints();
 
 app.Run();
+
+static async Task ExecuteStep3Async(
+    FlowStepMessage message,
+    string? traceParent,
+    string? traceState,
+    IServiceScopeFactory scopeFactory,
+    IHttpClientFactory httpClientFactory,
+    ILogger logger,
+    IHostEnvironment hostEnvironment,
+    ActivitySource activitySource)
+{
+    if (!WorkerTraceContext.TryParse(traceParent, traceState, out var parentContext))
+    {
+        logger.LogWarning("Invalid trace context for flow step 3. flow_run_id={flow_run_id}", message.FlowRunId);
+        parentContext = default;
+    }
+
+    using var step3Activity = activitySource.StartActivity("FlowStep3.AsyncFinalize", ActivityKind.Consumer, parentContext);
+    var traceId = Activity.Current?.TraceId.ToString();
+    var spanId = step3Activity?.SpanId.ToString();
+
+    // Update Step3 to Running
+    await UpdateFlowStepAsync(message.FlowRunId, "Step3.AsyncFinalize", FlowStepStatus.Running,
+        traceId, spanId, null, null, scopeFactory, logger);
+
+    logger.LogInformation("Flow step 3 started. flow_run_id={flow_run_id} trace_id={trace_id} correlation_id={correlation_id} service.name={service_name} timestamp_utc={timestamp_utc}",
+        message.FlowRunId, traceId, message.CorrelationId, hostEnvironment.ApplicationName, DateTimeOffset.UtcNow);
+
+    string? stepError = null;
+    try
+    {
+        // Simulate async finalisation with a delay
+        await Task.Delay(TimeSpan.FromSeconds(3));
+
+        var weatherClient = httpClientFactory.CreateClient("apiservicestaticweather");
+        var response = await weatherClient.GetAsync("/infoweather");
+        if (!response.IsSuccessStatusCode)
+        {
+            step3Activity?.SetStatus(ActivityStatusCode.Error, $"Status: {response.StatusCode}");
+            stepError = $"HTTP {(int)response.StatusCode} from /infoweather";
+        }
+
+        logger.LogInformation("Flow step 3 completed. flow_run_id={flow_run_id} trace_id={trace_id} correlation_id={correlation_id} service.name={service_name} timestamp_utc={timestamp_utc}",
+            message.FlowRunId, traceId, message.CorrelationId, hostEnvironment.ApplicationName, DateTimeOffset.UtcNow);
+    }
+    catch (Exception ex)
+    {
+        step3Activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+        stepError = ex.Message;
+        logger.LogError(ex, "Flow step 3 failed. flow_run_id={flow_run_id} trace_id={trace_id} correlation_id={correlation_id}", message.FlowRunId, traceId, message.CorrelationId);
+    }
+
+    var finalStepStatus = stepError is null ? FlowStepStatus.Completed : FlowStepStatus.Failed;
+    await UpdateFlowStepAsync(message.FlowRunId, "Step3.AsyncFinalize", finalStepStatus,
+        traceId, spanId, DateTimeOffset.UtcNow, stepError, scopeFactory, logger);
+
+    // Mark the overall FlowRun as Completed/Failed
+    try
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<StateStoreDbContext>();
+        var flowRun = await db.FlowRunRecords
+            .FirstOrDefaultAsync(r => r.FlowRunId == message.FlowRunId);
+        if (flowRun is not null)
+        {
+            // Only complete if all steps succeeded (don't override a prior failure)
+            var anyFailed = await db.FlowStepRecords
+                .AnyAsync(s => s.FlowRunId == message.FlowRunId && s.Status == FlowStepStatus.Failed);
+
+            flowRun.Status = anyFailed ? FlowRunStatus.Failed : FlowRunStatus.Completed;
+            flowRun.CompletedAt = DateTimeOffset.UtcNow;
+            flowRun.ErrorMessage = anyFailed ? "One or more steps failed" : null;
+            await db.SaveChangesAsync();
+
+            logger.LogInformation("FlowRun {flow_run_id} marked as {status}. trace_id={trace_id} correlation_id={correlation_id} timestamp_utc={timestamp_utc}",
+                message.FlowRunId, flowRun.Status, traceId, message.CorrelationId, DateTimeOffset.UtcNow);
+        }
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Failed to update FlowRun status. flow_run_id={flow_run_id}", message.FlowRunId);
+    }
+}
+
+static async Task UpdateFlowStepAsync(
+    string flowRunId,
+    string stepName,
+    FlowStepStatus status,
+    string? traceId,
+    string? spanId,
+    DateTimeOffset? completedAt,
+    string? errorMessage,
+    IServiceScopeFactory scopeFactory,
+    ILogger logger)
+{
+    try
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<StateStoreDbContext>();
+        var step = await db.FlowStepRecords
+            .FirstOrDefaultAsync(s => s.FlowRunId == flowRunId && s.StepName == stepName);
+        if (step is null) return;
+
+        step.Status = status;
+        step.TraceId ??= traceId;
+        step.SpanId ??= spanId;
+        if (status == FlowStepStatus.Running) step.StartedAt = DateTimeOffset.UtcNow;
+        step.CompletedAt = completedAt ?? step.CompletedAt;
+        step.ErrorMessage = errorMessage ?? step.ErrorMessage;
+        await db.SaveChangesAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Failed to update flow step. flow_run_id={flow_run_id} step_name={step_name}", flowRunId, stepName);
+    }
+}
 
 static string ResolveCorrelationId(WorkerJobMessage message, HttpContext httpContext, ILogger logger, IHostEnvironment hostEnvironment)
 {
@@ -79,3 +227,10 @@ static string ResolveCorrelationId(WorkerJobMessage message, HttpContext httpCon
 
     return generatedCorrelationId;
 }
+
+internal sealed record FlowStepMessage(
+    string FlowRunId,
+    string StepName,
+    string TraceParent,
+    string? TraceState,
+    string CorrelationId);
