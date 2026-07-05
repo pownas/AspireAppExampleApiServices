@@ -5,6 +5,7 @@
 @using System.Text.Json
 @using System.Text.Json.Serialization
 @inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager NavigationManager
 @inject ILogger<FlowDemo> Logger
 
 <PageTitle>Flödesutlösare</PageTitle>
@@ -144,10 +145,11 @@
 
         try
         {
-            var client = HttpClientFactory.CreateClient("workerservice1");
-            // Use the Web frontend's own proxy endpoint to avoid CORS / direct WS1 access
+            // Use the Web frontend's own proxy endpoint to avoid CORS / direct WS1 access.
+            // Relative URIs don't work on server-side HttpClient — build an absolute URL from NavigationManager.
             var http = HttpClientFactory.CreateClient();
-            var resp = await http.PostAsync("/api/flow/start", content: null);
+            var startUri = new Uri(new Uri(NavigationManager.BaseUri), "api/flow/start");
+            var resp = await http.PostAsync(startUri, content: null);
             if (!resp.IsSuccessStatusCode)
             {
                 _errorMessage = $"Kunde inte starta flöde: HTTP {(int)resp.StatusCode}";
@@ -201,7 +203,8 @@
         try
         {
             var http = HttpClientFactory.CreateClient();
-            var resp = await http.GetAsync($"/api/flow/{_flowRunId}/status");
+            var statusUri = new Uri(new Uri(NavigationManager.BaseUri), $"api/flow/{_flowRunId}/status");
+            var resp = await http.GetAsync(statusUri);
             if (!resp.IsSuccessStatusCode) return;
 
             using var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>();
