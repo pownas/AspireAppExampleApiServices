@@ -11,4 +11,7 @@
   <Project Path="AspireApp1.Tests/AspireApp1.Tests.csproj" />
   <Project Path="AspireApp1.Web/AspireApp1.Web.csproj" />
   <Project Path="AspireApp1.WorkerService1/AspireApp1.WorkerService1.csproj" />
+  <Project Path="AspireApp1.WorkerService2/AspireApp1.WorkerService2.csproj" />
+  <Project Path="AspireApp1.WorkerService3/AspireApp1.WorkerService3.csproj" />
+  <Project Path="AspireApp1.WorkerService4/AspireApp1.WorkerService4.csproj" />
 </Solution>

@@ -53,11 +53,30 @@ builder.AddProject<Projects.AspireApp1_Web>("webfrontend")
     .WithReference(apiServiceForecast)
     .WithReference(apiServiceStaticWeather);
 
-var workerService = builder.AddProject<Projects.AspireApp1_WorkerService1>("workerservice1")
+var workerService1 = builder.AddProject<Projects.AspireApp1_WorkerService1>("workerservice1")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints()
     .WithReference(apiServiceStaticWeather);
 
-apiServiceForecast.WithReference(workerService).WaitFor(workerService);
+apiServiceForecast.WithReference(workerService1).WaitFor(workerService1);
+
+var workerService2 = builder.AddProject<Projects.AspireApp1_WorkerService2>("workerservice2")
+    .WithHttpHealthCheck("/health")
+    .WithExternalHttpEndpoints()
+    .WithReference(apiServiceStaticWeather);
+
+apiServiceForecast.WithReference(workerService2).WaitFor(workerService2);
+
+var workerService3 = builder.AddProject<Projects.AspireApp1_WorkerService3>("workerservice3")
+    .WithHttpHealthCheck("/health")
+    .WithExternalHttpEndpoints()
+    .WithReference(apiServiceStaticWeather);
+
+apiServiceForecast.WithReference(workerService3).WaitFor(workerService3);
+
+var workerService4 = builder.AddProject<Projects.AspireApp1_WorkerService4>("workerservice4")
+    .WithHttpHealthCheck("/health")
+    .WithExternalHttpEndpoints()
+    .WithReference(apiServiceStaticWeather);
 
 builder.Build().Run();
