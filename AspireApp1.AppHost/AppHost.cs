@@ -1,4 +1,8 @@
-﻿var builder = DistributedApplication.CreateBuilder(args);
+var builder = DistributedApplication.CreateBuilder(args);
+
+// PostgreSQL state store — shared by all worker services
+var postgres = builder.AddPostgres("postgres").WithDataVolume();
+var stateDb = postgres.AddDatabase("statestore");
 
 var apiService = builder.AddProject<Projects.AspireApp1_ApiService>("apiservice")
     .WithHttpHealthCheck("/health")
@@ -56,21 +60,27 @@ builder.AddProject<Projects.AspireApp1_Web>("webfrontend")
 var workerService1 = builder.AddProject<Projects.AspireApp1_WorkerService1>("workerservice1")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints()
-    .WithReference(apiServiceStaticWeather);
+    .WithReference(apiServiceStaticWeather)
+    .WithReference(stateDb)
+    .WaitFor(stateDb);
 
 apiServiceForecast.WithReference(workerService1).WaitFor(workerService1);
 
 var workerService2 = builder.AddProject<Projects.AspireApp1_WorkerService2>("workerservice2")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints()
-    .WithReference(apiServiceStaticWeather);
+    .WithReference(apiServiceStaticWeather)
+    .WithReference(stateDb)
+    .WaitFor(stateDb);
 
 workerService1.WithReference(workerService2).WaitFor(workerService2);
 
 var workerService3 = builder.AddProject<Projects.AspireApp1_WorkerService3>("workerservice3")
     .WithHttpHealthCheck("/health")
     .WithExternalHttpEndpoints()
-    .WithReference(apiServiceStaticWeather);
+    .WithReference(apiServiceStaticWeather)
+    .WithReference(stateDb)
+    .WaitFor(stateDb);
 
 workerService1.WithReference(workerService3).WaitFor(workerService3);
 workerService2.WithReference(workerService3).WaitFor(workerService3);
@@ -81,8 +91,10 @@ var workerService4 = builder.AddProject<Projects.AspireApp1_WorkerService4>("wor
     .WithReference(workerService1)
     .WithReference(workerService2)
     .WithReference(workerService3)
+    .WithReference(stateDb)
     .WaitFor(workerService1)
     .WaitFor(workerService2)
-    .WaitFor(workerService3);
+    .WaitFor(workerService3)
+    .WaitFor(stateDb);
 
 builder.Build().Run();

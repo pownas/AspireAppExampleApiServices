@@ -1,4 +1,5 @@
-﻿using AspireApp1.WorkerService1;
+using AspireApp1.StateStore;
+using AspireApp1.WorkerService1;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,10 +21,19 @@ builder.Services.AddHttpClient("workerservice3", client =>
     client.BaseAddress = new Uri("https+http://workerservice3");
 });
 
+builder.AddNpgsqlDbContext<StateStoreDbContext>("statestore");
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseTraceContextLogScope();
+
+// Ensure the database schema exists before the hosted services start
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<StateStoreDbContext>();
+    await db.Database.EnsureCreatedAsync();
+}
 
 app.MapPost("/jobs", async (WorkerJobMessage message, WorkerJobQueue queue, ILogger<Program> logger, IHostEnvironment hostEnvironment, HttpContext httpContext) =>
 {

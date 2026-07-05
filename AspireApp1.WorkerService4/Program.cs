@@ -1,3 +1,4 @@
+using AspireApp1.StateStore;
 using AspireApp1.WorkerService4;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,10 +19,18 @@ builder.Services.AddHttpClient("workerservice3", client =>
     client.BaseAddress = new Uri("https+http://workerservice3");
 });
 
+builder.AddNpgsqlDbContext<StateStoreDbContext>("statestore");
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseTraceContextLogScope();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<StateStoreDbContext>();
+    await db.Database.EnsureCreatedAsync();
+}
 
 app.MapDefaultEndpoints();
 

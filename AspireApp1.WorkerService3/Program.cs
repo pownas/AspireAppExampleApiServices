@@ -1,3 +1,4 @@
+using AspireApp1.StateStore;
 using AspireApp1.WorkerService3;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,10 +12,18 @@ builder.Services.AddHttpClient("apiservicestaticweather", client =>
     client.BaseAddress = new Uri("https+http://apiservicestaticweather");
 });
 
+builder.AddNpgsqlDbContext<StateStoreDbContext>("statestore");
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseTraceContextLogScope();
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<StateStoreDbContext>();
+    await db.Database.EnsureCreatedAsync();
+}
 
 app.MapPost("/jobs", async (WorkerJobMessage message, WorkerJobQueue queue, ILogger<Program> logger, IHostEnvironment hostEnvironment, HttpContext httpContext) =>
 {
