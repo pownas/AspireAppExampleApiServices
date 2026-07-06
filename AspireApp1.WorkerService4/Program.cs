@@ -1,5 +1,6 @@
 using AspireApp1.StateStore;
 using AspireApp1.WorkerService4;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,7 +20,9 @@ builder.Services.AddHttpClient("workerservice3", client =>
     client.BaseAddress = new Uri("https+http://workerservice3");
 });
 
-builder.AddNpgsqlDbContext<StateStoreDbContext>("statestore");
+builder.Services.AddDbContext<StateStoreDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("statestore")
+        ?? $"Data Source={Path.Combine(Path.GetTempPath(), "AspireApp1StateStore", "statestore.db")}"));
 
 var app = builder.Build();
 

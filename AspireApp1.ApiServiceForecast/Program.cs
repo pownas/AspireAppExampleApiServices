@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Net.Http.Json;
 using AspireApp1.StateStore;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 var activitySource = new ActivitySource("AspireApp1.ApiServiceForecast");
@@ -36,7 +37,9 @@ builder.Services.AddHttpClient("workerservice1", client =>
 });
 
 // State store — used to persist SpanRecords for ProcessFlow visibility
-builder.AddNpgsqlDbContext<StateStoreDbContext>("statestore");
+builder.Services.AddDbContext<StateStoreDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("statestore")
+        ?? $"Data Source={Path.Combine(Path.GetTempPath(), "AspireApp1StateStore", "statestore.db")}"));
 
 var app = builder.Build();
 

@@ -28,7 +28,9 @@ builder.Services.AddHttpClient("workerservice1", client =>
 });
 
 // State-store database — used by the TraceQueryService to look up trace data.
-builder.AddNpgsqlDbContext<StateStoreDbContext>("statestore");
+builder.Services.AddDbContext<StateStoreDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("statestore")
+        ?? $"Data Source={Path.Combine(Path.GetTempPath(), "AspireApp1StateStore", "statestore.db")}"));
 
 // TraceQueryService builds TraceModel objects from state-store records written by the worker services.
 builder.Services.AddScoped<TraceQueryService>();

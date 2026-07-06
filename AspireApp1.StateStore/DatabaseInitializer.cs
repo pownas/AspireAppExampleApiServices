@@ -25,16 +25,18 @@ public static class DatabaseInitializer
         // Idempotent DDL for tables added in later iterations — safe to run against
         // both fresh databases (tables already created above) and existing databases
         // that were created before these tables were added to the EF Core model.
+        // NOTE: Datetime columns are TEXT to match EF Core's SQLite convention,
+        // which stores DateTimeOffset values as ISO 8601 strings.
         await db.Database.ExecuteSqlRawAsync("""
             CREATE TABLE IF NOT EXISTS "FlowRunRecords" (
-                "Id"            SERIAL PRIMARY KEY,
-                "FlowRunId"     VARCHAR(64)  NOT NULL,
-                "FlowName"      VARCHAR(128) NOT NULL,
-                "CorrelationId" VARCHAR(64)  NOT NULL,
-                "TraceId"       VARCHAR(64),
-                "StartedAt"     TIMESTAMPTZ  NOT NULL,
-                "CompletedAt"   TIMESTAMPTZ,
-                "Status"        VARCHAR(32)  NOT NULL,
+                "Id"            INTEGER PRIMARY KEY AUTOINCREMENT,
+                "FlowRunId"     TEXT NOT NULL,
+                "FlowName"      TEXT NOT NULL,
+                "CorrelationId" TEXT NOT NULL,
+                "TraceId"       TEXT,
+                "StartedAt"     TEXT NOT NULL,
+                "CompletedAt"   TEXT,
+                "Status"        TEXT NOT NULL,
                 "ErrorMessage"  TEXT
             );
             CREATE UNIQUE INDEX IF NOT EXISTS "IX_FlowRunRecords_FlowRunId"
@@ -45,17 +47,17 @@ public static class DatabaseInitializer
                 ON "FlowRunRecords" ("TraceId");
 
             CREATE TABLE IF NOT EXISTS "FlowStepRecords" (
-                "Id"           SERIAL PRIMARY KEY,
-                "FlowRunId"    VARCHAR(64)  NOT NULL,
-                "StepName"     VARCHAR(128) NOT NULL,
-                "ServiceName"  VARCHAR(128) NOT NULL,
-                "StepOrder"    INT          NOT NULL,
-                "Status"       VARCHAR(32)  NOT NULL,
-                "StartedAt"    TIMESTAMPTZ,
-                "CompletedAt"  TIMESTAMPTZ,
+                "Id"           INTEGER PRIMARY KEY AUTOINCREMENT,
+                "FlowRunId"    TEXT NOT NULL,
+                "StepName"     TEXT NOT NULL,
+                "ServiceName"  TEXT NOT NULL,
+                "StepOrder"    INTEGER NOT NULL,
+                "Status"       TEXT NOT NULL,
+                "StartedAt"    TEXT,
+                "CompletedAt"  TEXT,
                 "ErrorMessage" TEXT,
-                "TraceId"      VARCHAR(64),
-                "SpanId"       VARCHAR(32)
+                "TraceId"      TEXT,
+                "SpanId"       TEXT
             );
             CREATE INDEX IF NOT EXISTS "IX_FlowStepRecords_FlowRunId"
                 ON "FlowStepRecords" ("FlowRunId");
@@ -63,18 +65,18 @@ public static class DatabaseInitializer
                 ON "FlowStepRecords" ("TraceId");
 
             CREATE TABLE IF NOT EXISTS "SpanRecords" (
-                "Id"            SERIAL PRIMARY KEY,
-                "TraceId"       VARCHAR(64)  NOT NULL,
-                "SpanId"        VARCHAR(32)  NOT NULL,
-                "ParentSpanId"  VARCHAR(32),
-                "ServiceName"   VARCHAR(128) NOT NULL,
-                "OperationName" VARCHAR(256) NOT NULL,
-                "StartTime"     TIMESTAMPTZ  NOT NULL,
-                "EndTime"       TIMESTAMPTZ,
-                "Status"        VARCHAR(32)  NOT NULL,
+                "Id"            INTEGER PRIMARY KEY AUTOINCREMENT,
+                "TraceId"       TEXT NOT NULL,
+                "SpanId"        TEXT NOT NULL,
+                "ParentSpanId"  TEXT,
+                "ServiceName"   TEXT NOT NULL,
+                "OperationName" TEXT NOT NULL,
+                "StartTime"     TEXT NOT NULL,
+                "EndTime"       TEXT,
+                "Status"        TEXT NOT NULL,
                 "ErrorMessage"  TEXT,
-                "HttpStatusCode" INT,
-                "CreatedAt"     TIMESTAMPTZ  NOT NULL
+                "HttpStatusCode" INTEGER,
+                "CreatedAt"     TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS "IX_SpanRecords_TraceId"
                 ON "SpanRecords" ("TraceId");

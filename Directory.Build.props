@@ -9,4 +9,14 @@
 
     <UseArtifactsOutput>true</UseArtifactsOutput>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      SQLitePCLRaw.lib.e_sqlite3 bundles a SQLite native binary that contains CVE-2022-35737.
+      No patched version is available (2.1.11 is the latest release as of writing).
+      This is a dev/demo application; the risk is acceptable until an upstream fix is published.
+      Advisory: https://github.com/advisories/GHSA-2m69-gcr7-jv3q
+    -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />
+  </ItemGroup>
 </Project>
