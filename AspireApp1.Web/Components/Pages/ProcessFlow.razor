@@ -5,6 +5,8 @@
 @using System.Text.RegularExpressions
 @inject TraceQueryService TraceQuery
 @inject ILogger<ProcessFlow> Logger
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <PageTitle>Processflöde</PageTitle>
 
@@ -29,7 +31,8 @@
                 else if (searchType == "correlationId") { <text>CorrelationId (GUID eller sträng)</text> }
                 else { <text>SpanId (16 hexadecimala tecken)</text> }
             </label>
-            <input class="form-control" type="text" @bind="searchInput" placeholder="Ange ID..." />
+            <input class="form-control" type="text" @bind="searchInput" @bind:event="oninput"
+                   placeholder="Ange ID..." @onkeydown="HandleKeyDown" />
         </div>
         <div class="col-md-3">
             <button class="btn btn-primary w-100" @onclick="SearchAsync" disabled="@isLoading">
@@ -47,6 +50,24 @@
     }
 </div>
 
+<!-- Recent searches -->
+@if (recentSearches.Count > 0 && currentTrace is null && !notFound)
+{
+    <div class="mb-4">
+        <h6 class="text-muted">Senaste sökningar</h6>
+        <div class="d-flex flex-wrap gap-2">
+            @foreach (var recent in recentSearches)
+            {
+                <button class="btn btn-outline-secondary btn-sm font-monospace"
+                        @onclick="() => ApplyRecentSearch(recent)"
+                        title="@recent.SearchType: @recent.Input">
+                    <small>@recent.SearchType:</small> @TruncateId(recent.Input)
+                </button>
+            }
+        </div>
+    </div>
+}
+
 <!-- Results -->
 @if (notFound)
 {
@@ -54,9 +75,34 @@
 }
 else if (currentTrace is not null)
 {
-    <!-- Overall status badge -->
-    <div class="mb-3">
+    <!-- Summary bar -->
+    <div class="d-flex flex-wrap gap-3 align-items-center mb-3">
         <span class="badge fs-6 @GetOverallStatusBadge(currentTrace).cssClass">@GetOverallStatusBadge(currentTrace).text</span>
+        <span class="text-muted small">
+            @currentTrace.Spans.Count span(s) |
+            @currentTrace.Spans.Select(s => s.ServiceName).Distinct().Count() tjänst(er) |
+            Startade: @currentTrace.StartTime.ToString("HH:mm:ss.fff")
+        </span>
+        @if (currentTrace.TraceId is not null)
+        {
+            <button class="btn btn-outline-secondary btn-sm py-0 font-monospace small"
+                    @onclick='() => CopyToClipboardAsync(currentTrace.TraceId)'
+                    title="Kopiera TraceId">
+                <small>TraceId: @TruncateId(currentTrace.TraceId)</small> 📋
+            </button>
+        }
+        @if (currentTrace.CorrelationId is not null)
+        {
+            <button class="btn btn-outline-secondary btn-sm py-0 font-monospace small"
+                    @onclick='() => CopyToClipboardAsync(currentTrace.CorrelationId)'
+                    title="Kopiera CorrelationId">
+                <small>CorrId: @TruncateId(currentTrace.CorrelationId)</small> 📋
+            </button>
+        }
+        @if (_copyFeedback is not null)
+        {
+            <span class="text-success small">@_copyFeedback</span>
+        }
     </div>
 
     <!-- View toggle + filters -->
@@ -87,6 +133,8 @@ else if (currentTrace is not null)
                 }
             </select>
         </div>
+
+        <span class="text-muted small ms-auto">Visar @VisibleSpans.Count av @currentTrace.Spans.Count span(s)</span>
     </div>
 
     @if (viewMode == "steps")
@@ -163,6 +211,10 @@ else if (currentTrace is not null)
 }
 
 @code {
+    [SupplyParameterFromQuery(Name = "traceId")] private string? QueryTraceId { get; set; }
+    [SupplyParameterFromQuery(Name = "correlationId")] private string? QueryCorrelationId { get; set; }
+    [SupplyParameterFromQuery(Name = "spanId")] private string? QuerySpanId { get; set; }
+
     private string searchType = "traceId";
     private string searchInput = string.Empty;
     private string viewMode = "steps";
@@ -175,6 +227,42 @@ else if (currentTrace is not null)
     private SpanModel? selectedSpan;
     private string? highlightSpanId;
     private HashSet<string> highlightedSpanIds = [];
+    private string? _copyFeedback;
+    private System.Threading.Timer? _copyFeedbackTimer;
+
+    // Recent searches (stored in-memory per circuit, max 5)
+    private List<(string SearchType, string Input)> recentSearches = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Auto-search when navigated to with URL query params (e.g. from FlowDemo)
+        if (!string.IsNullOrWhiteSpace(QueryTraceId) && currentTrace is null && !isLoading)
+        {
+            searchType = "traceId";
+            searchInput = QueryTraceId;
+            await SearchAsync();
+        }
+        else if (!string.IsNullOrWhiteSpace(QueryCorrelationId) && currentTrace is null && !isLoading)
+        {
+            searchType = "correlationId";
+            searchInput = QueryCorrelationId;
+            await SearchAsync();
+        }
+        else if (!string.IsNullOrWhiteSpace(QuerySpanId) && currentTrace is null && !isLoading)
+        {
+            searchType = "spanId";
+            searchInput = QuerySpanId;
+            await SearchAsync();
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SearchAsync();
+        }
+    }
 
     private async Task SearchAsync()
     {
@@ -227,6 +315,8 @@ else if (currentTrace is not null)
             else
             {
                 currentTrace = trace;
+                AddRecentSearch(searchType, trimmedInput);
+
                 if (searchType == "spanId")
                 {
                     highlightSpanId = trimmedInput.ToLowerInvariant();
@@ -250,6 +340,46 @@ else if (currentTrace is not null)
             isLoading = false;
         }
     }
+
+    private void AddRecentSearch(string type, string input)
+    {
+        recentSearches.RemoveAll(r => r.SearchType == type && r.Input == input);
+        recentSearches.Insert(0, (type, input));
+        if (recentSearches.Count > 5)
+        {
+            recentSearches.RemoveAt(recentSearches.Count - 1);
+        }
+    }
+
+    private async Task ApplyRecentSearch((string SearchType, string Input) recent)
+    {
+        searchType = recent.SearchType;
+        searchInput = recent.Input;
+        await SearchAsync();
+    }
+
+    private async Task CopyToClipboardAsync(string text)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+            _copyFeedback = "Kopierat! ✓";
+        }
+        catch
+        {
+            _copyFeedback = "Kopiera misslyckades";
+        }
+
+        _copyFeedbackTimer?.Dispose();
+        _copyFeedbackTimer = new System.Threading.Timer(_ => InvokeAsync(() =>
+        {
+            _copyFeedback = null;
+            StateHasChanged();
+        }), null, TimeSpan.FromSeconds(2), Timeout.InfiniteTimeSpan);
+    }
+
+    private static string TruncateId(string id) =>
+        id.Length > 20 ? id[..8] + "…" + id[^8..] : id;
 
     private List<SpanModel> VisibleSpans => GetFilteredSpans();
 

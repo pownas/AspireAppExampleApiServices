@@ -1,7 +1,156 @@
 ﻿@page "/"
+@rendermode InteractiveServer
+@using AspireApp1.StateStore
+@using Microsoft.EntityFrameworkCore
+@inject StateStoreDbContext Db
 
-<PageTitle>Home</PageTitle>
+<PageTitle>AspireApp1 – Demo Dashboard</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>AspireApp1 – Demo Dashboard</h1>
+<p class="lead text-muted mb-4">
+    En Aspire-baserad mikrotjänstdemonstration med distribuerad telemetri, processflödesvisualisering och worker-kedjor.
+</p>
 
-Welcome to your new app.
+<!-- Quick actions -->
+<div class="row g-3 mb-5">
+    <div class="col-md-4">
+        <div class="card h-100 border-primary">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <span class="bi bi-play-circle-fill me-2" aria-hidden="true" style="color:#0d6efd;"></span>Starta ett flöde
+                </h5>
+                <p class="card-text text-muted small">
+                    Utlös ett multi-steg worker-flöde (WS1→WS2→WS3) och se status i realtid.
+                </p>
+                <a href="/flowdemo" class="btn btn-primary btn-sm">Flödesutlösare →</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100 border-success">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <span class="bi bi-diagram-3-fill me-2" aria-hidden="true" style="color:#198754;"></span>Spåra ett flöde
+                </h5>
+                <p class="card-text text-muted small">
+                    Sök på TraceId, CorrelationId eller SpanId och visualisera hela anropskedjan.
+                </p>
+                <a href="/processflow" class="btn btn-success btn-sm">Processflöde →</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100 border-warning">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <span class="bi bi-bug me-2" aria-hidden="true" style="color:#ffc107;"></span>Utlös felscenarier
+                </h5>
+                <p class="card-text text-muted small">
+                    Anropa tjänster som avsiktligt returnerar fel — observera spridningen i telemetrin.
+                </p>
+                <a href="/errorcall" class="btn btn-warning btn-sm me-1">Felscenario 1 →</a>
+                <a href="/errorcall2" class="btn btn-outline-warning btn-sm">Felscenario 2 →</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Architecture overview -->
+<div class="card mb-4">
+    <div class="card-header fw-semibold">Tjänstarkitektur</div>
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-center">
+            <div class="text-center">
+                <div class="badge bg-primary fs-6 px-3 py-2">Web Frontend</div>
+                <div class="text-muted small mt-1">Blazor Server</div>
+            </div>
+            <span class="text-muted fs-4">↕</span>
+            <div class="text-center">
+                <div class="badge bg-secondary fs-6 px-3 py-2">ApiService</div>
+                <div class="text-muted small mt-1">Weather &amp; Forecast</div>
+            </div>
+            <span class="text-muted fs-4">↔</span>
+            <div class="text-center">
+                <div class="badge bg-secondary fs-6 px-3 py-2">ApiServiceForecast</div>
+                <div class="text-muted small mt-1">Forecast + queue</div>
+            </div>
+            <span class="text-muted fs-4">↔</span>
+            <div class="text-center">
+                <div class="badge bg-info text-dark fs-6 px-3 py-2">WorkerService 1</div>
+                <div class="text-muted small mt-1">Job consumer</div>
+            </div>
+            <span class="text-muted fs-4">→</span>
+            <div class="text-center">
+                <div class="badge bg-info text-dark fs-6 px-3 py-2">WorkerService 2</div>
+                <div class="text-muted small mt-1">Chain step 2</div>
+            </div>
+            <span class="text-muted fs-4">→</span>
+            <div class="text-center">
+                <div class="badge bg-info text-dark fs-6 px-3 py-2">WorkerService 3</div>
+                <div class="text-muted small mt-1">Chain step 3</div>
+            </div>
+        </div>
+        <p class="text-muted small text-center mt-2 mb-0">
+            WorkerService&nbsp;4 övervakar WS1–WS3 periodiskt. Alla tjänster skriver telemetri till SQLite-tillståndslagret.
+        </p>
+    </div>
+</div>
+
+<!-- Live stats -->
+<div class="card">
+    <div class="card-header fw-semibold">Tillståndslagret – Live statistik</div>
+    <div class="card-body">
+        @if (_statsLoaded)
+        {
+            <div class="row g-3 text-center">
+                <div class="col-6 col-md-3">
+                    <div class="fs-3 fw-bold text-primary">@_jobCount</div>
+                    <div class="text-muted small">Jobbposter</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="fs-3 fw-bold text-success">@_flowRunCount</div>
+                    <div class="text-muted small">Flödeskörningar</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="fs-3 fw-bold text-info">@_spanCount</div>
+                    <div class="text-muted small">Span-poster</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="fs-3 fw-bold text-warning">@_healthCheckCount</div>
+                    <div class="text-muted small">Hälsokontroller</div>
+                </div>
+            </div>
+            <div class="text-center mt-3">
+                <a href="/processflow" class="btn btn-outline-primary btn-sm">Utforska ett flöde i Processflöde →</a>
+            </div>
+        }
+        else
+        {
+            <div class="text-muted"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Laddar statistik…</div>
+        }
+    </div>
+</div>
+
+@code {
+    private bool _statsLoaded;
+    private int _jobCount;
+    private int _flowRunCount;
+    private int _spanCount;
+    private int _healthCheckCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _jobCount = await Db.JobStates.CountAsync();
+            _flowRunCount = await Db.FlowRunRecords.CountAsync();
+            _spanCount = await Db.SpanRecords.CountAsync();
+            _healthCheckCount = await Db.ServiceHealthRecords.CountAsync();
+        }
+        catch
+        {
+            // DB may not be available (e.g. first run before schema is created)
+        }
+        _statsLoaded = true;
+    }
+}
