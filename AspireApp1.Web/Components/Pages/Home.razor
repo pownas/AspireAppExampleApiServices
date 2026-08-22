@@ -3,6 +3,7 @@
 @using AspireApp1.StateStore
 @using Microsoft.EntityFrameworkCore
 @inject StateStoreDbContext Db
+@inject ILogger<Home> Logger
 
 <PageTitle>AspireApp1 – Demo Dashboard</PageTitle>
 
@@ -147,9 +148,10 @@
             _spanCount = await Db.SpanRecords.CountAsync();
             _healthCheckCount = await Db.ServiceHealthRecords.CountAsync();
         }
-        catch
+        catch (Exception ex)
         {
-            // DB may not be available (e.g. first run before schema is created)
+            // DB may not be available on first run before schema initialisation completes
+            Logger.LogWarning(ex, "Could not load state store stats on home page");
         }
         _statsLoaded = true;
     }

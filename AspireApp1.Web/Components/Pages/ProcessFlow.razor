@@ -1,5 +1,6 @@
 @page "/processflow"
 @rendermode InteractiveServer
+@implements IDisposable
 
 @using AspireApp1.Web.Models
 @using System.Text.RegularExpressions
@@ -229,31 +230,42 @@ else if (currentTrace is not null)
     private HashSet<string> highlightedSpanIds = [];
     private string? _copyFeedback;
     private System.Threading.Timer? _copyFeedbackTimer;
+    private bool _initialParamSearchDone;
 
     // Recent searches (stored in-memory per circuit, max 5)
     private List<(string SearchType, string Input)> recentSearches = [];
 
     protected override async Task OnParametersSetAsync()
     {
-        // Auto-search when navigated to with URL query params (e.g. from FlowDemo)
-        if (!string.IsNullOrWhiteSpace(QueryTraceId) && currentTrace is null && !isLoading)
+        // Auto-search only once per navigation to avoid re-triggering on every re-render
+        if (_initialParamSearchDone) return;
+
+        if (!string.IsNullOrWhiteSpace(QueryTraceId))
         {
+            _initialParamSearchDone = true;
             searchType = "traceId";
             searchInput = QueryTraceId;
             await SearchAsync();
         }
-        else if (!string.IsNullOrWhiteSpace(QueryCorrelationId) && currentTrace is null && !isLoading)
+        else if (!string.IsNullOrWhiteSpace(QueryCorrelationId))
         {
+            _initialParamSearchDone = true;
             searchType = "correlationId";
             searchInput = QueryCorrelationId;
             await SearchAsync();
         }
-        else if (!string.IsNullOrWhiteSpace(QuerySpanId) && currentTrace is null && !isLoading)
+        else if (!string.IsNullOrWhiteSpace(QuerySpanId))
         {
+            _initialParamSearchDone = true;
             searchType = "spanId";
             searchInput = QuerySpanId;
             await SearchAsync();
         }
+    }
+
+    public void Dispose()
+    {
+        _copyFeedbackTimer?.Dispose();
     }
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
