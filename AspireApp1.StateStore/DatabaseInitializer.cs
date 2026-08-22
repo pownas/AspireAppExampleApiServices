@@ -81,5 +81,29 @@ public static class DatabaseInitializer
             CREATE INDEX IF NOT EXISTS "IX_SpanRecords_TraceId"
                 ON "SpanRecords" ("TraceId");
             """, cancellationToken);
+
+        // Schema evolution: add RetryAttempt and MaxRetries columns to FlowStepRecords
+        // (idempotent — ALTER TABLE ADD COLUMN is a no-op if the column already exists in SQLite)
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE \"FlowStepRecords\" ADD COLUMN \"RetryAttempt\" INTEGER NOT NULL DEFAULT 0;",
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex.Message.Contains("duplicate column name"))
+        {
+            // Column already exists — safe to ignore
+        }
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE \"FlowStepRecords\" ADD COLUMN \"MaxRetries\" INTEGER NOT NULL DEFAULT 0;",
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex.Message.Contains("duplicate column name"))
+        {
+            // Column already exists — safe to ignore
+        }
     }
 }

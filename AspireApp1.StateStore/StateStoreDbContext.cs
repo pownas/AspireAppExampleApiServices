@@ -73,6 +73,8 @@ public class StateStoreDbContext(DbContextOptions<StateStoreDbContext> options) 
             entity.Property(e => e.ServiceName).HasMaxLength(128);
             entity.Property(e => e.TraceId).HasMaxLength(64);
             entity.Property(e => e.SpanId).HasMaxLength(32);
+            entity.Property(e => e.RetryAttempt).HasDefaultValue(0);
+            entity.Property(e => e.MaxRetries).HasDefaultValue(0);
         });
 
         modelBuilder.Entity<SpanRecord>(entity =>

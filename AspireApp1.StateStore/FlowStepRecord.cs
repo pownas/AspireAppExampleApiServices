@@ -33,12 +33,19 @@ public sealed class FlowStepRecord
 
     /// <summary>Span ID of the activity recorded when the step runs.</summary>
     public string? SpanId { get; set; }
+
+    /// <summary>Current retry attempt number (1-based). 0 = not yet started.</summary>
+    public int RetryAttempt { get; set; }
+
+    /// <summary>Maximum number of retry attempts configured for this step.</summary>
+    public int MaxRetries { get; set; }
 }
 
 public enum FlowStepStatus
 {
     Pending,
     Running,
+    Retrying,
     Completed,
     Failed
 }

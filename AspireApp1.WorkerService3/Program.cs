@@ -88,6 +88,33 @@ app.MapPost("/flow/step", (
     return Results.Accepted();
 });
 
+// ── Retry-demo flow step endpoint (Step 3) ────────────────────────────────
+app.MapPost("/flow/retry-demo/step", (
+    FlowStepMessage message,
+    IServiceScopeFactory scopeFactory,
+    IHttpClientFactory httpClientFactory,
+    ILogger<Program> logger,
+    IHostEnvironment hostEnvironment) =>
+{
+    var capturedTraceParent = Activity.Current?.Id ?? message.TraceParent;
+    var capturedTraceState = Activity.Current?.TraceStateString ?? message.TraceState;
+
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            await ExecuteRetryStep3Async(message, capturedTraceParent, capturedTraceState,
+                scopeFactory, httpClientFactory, logger, hostEnvironment, flowActivitySource);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "RetryDemo step 3 background task failed. flow_run_id={flow_run_id}", message.FlowRunId);
+        }
+    });
+
+    return Results.Accepted();
+});
+
 app.MapDefaultEndpoints();
 
 app.Run();
@@ -228,6 +255,138 @@ static string ResolveCorrelationId(WorkerJobMessage message, HttpContext httpCon
         generatedCorrelationId);
 
     return generatedCorrelationId;
+}
+
+// ── Retry-demo Step 3 helper ──────────────────────────────────────────────
+
+static async Task ExecuteRetryStep3Async(
+    FlowStepMessage message,
+    string? traceParent,
+    string? traceState,
+    IServiceScopeFactory scopeFactory,
+    IHttpClientFactory httpClientFactory,
+    ILogger logger,
+    IHostEnvironment hostEnvironment,
+    ActivitySource activitySource)
+{
+    if (!WorkerTraceContext.TryParse(traceParent, traceState, out var parentContext))
+    {
+        parentContext = default;
+    }
+
+    const int maxAttempts = 3;
+    const int retryDelaySeconds = 10;
+
+    string? lastError = null;
+    string? traceId = null;
+    string? spanId = null;
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++)
+    {
+        using var stepActivity = activitySource.StartActivity("RetryStep3.Finalize", ActivityKind.Consumer, parentContext);
+        traceId = Activity.Current?.TraceId.ToString();
+        spanId = stepActivity?.SpanId.ToString();
+
+        await UpdateRetryFlowStep3Async(message.FlowRunId, "RetryStep3.Finalize", FlowStepStatus.Running,
+            traceId, spanId, attempt, maxAttempts, null, null, scopeFactory, logger);
+
+        logger.LogInformation("RetryDemo step 3 attempt {attempt}/{max_attempts}. flow_run_id={flow_run_id} trace_id={trace_id} correlation_id={correlation_id} service.name={service_name} timestamp_utc={timestamp_utc}",
+            attempt, maxAttempts, message.FlowRunId, traceId, message.CorrelationId, hostEnvironment.ApplicationName, DateTimeOffset.UtcNow);
+
+        if (attempt < maxAttempts)
+        {
+            lastError = $"Simulerat fel (försök {attempt}/{maxAttempts}) – återförsök om {retryDelaySeconds} s";
+            stepActivity?.SetStatus(ActivityStatusCode.Error, lastError);
+
+            logger.LogWarning("RetryDemo step 3 intentional failure on attempt {attempt}/{max_attempts}. error={error} flow_run_id={flow_run_id} trace_id={trace_id} correlation_id={correlation_id} timestamp_utc={timestamp_utc}",
+                attempt, maxAttempts, lastError, message.FlowRunId, traceId, message.CorrelationId, DateTimeOffset.UtcNow);
+
+            await UpdateRetryFlowStep3Async(message.FlowRunId, "RetryStep3.Finalize", FlowStepStatus.Retrying,
+                traceId, spanId, attempt, maxAttempts, lastError, null, scopeFactory, logger);
+
+            await Task.Delay(TimeSpan.FromSeconds(retryDelaySeconds));
+            continue;
+        }
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(3));
+            var weatherClient = httpClientFactory.CreateClient("apiservicestaticweather");
+            var response = await weatherClient.GetAsync("/infoweather");
+            lastError = response.IsSuccessStatusCode ? null : $"HTTP {(int)response.StatusCode} from /infoweather";
+            if (!response.IsSuccessStatusCode) stepActivity?.SetStatus(ActivityStatusCode.Error, lastError);
+            else logger.LogInformation("RetryDemo step 3 succeeded on attempt {attempt}/{max_attempts}. flow_run_id={flow_run_id} trace_id={trace_id} timestamp_utc={timestamp_utc}",
+                attempt, maxAttempts, message.FlowRunId, traceId, DateTimeOffset.UtcNow);
+        }
+        catch (Exception ex)
+        {
+            stepActivity?.SetStatus(ActivityStatusCode.Error, ex.Message);
+            lastError = ex.Message;
+        }
+
+        var finalStatus = lastError is null ? FlowStepStatus.Completed : FlowStepStatus.Failed;
+        await UpdateRetryFlowStep3Async(message.FlowRunId, "RetryStep3.Finalize", finalStatus,
+            traceId, spanId, attempt, maxAttempts, lastError, DateTimeOffset.UtcNow, scopeFactory, logger);
+
+        // Mark the overall flow as Completed/Failed
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<StateStoreDbContext>();
+            var flowRun = await db.FlowRunRecords.FirstOrDefaultAsync(r => r.FlowRunId == message.FlowRunId);
+            if (flowRun is not null)
+            {
+                var anyFailed = await db.FlowStepRecords
+                    .AnyAsync(s => s.FlowRunId == message.FlowRunId && s.Status == FlowStepStatus.Failed);
+                flowRun.Status = anyFailed ? FlowRunStatus.Failed : FlowRunStatus.Completed;
+                flowRun.CompletedAt = DateTimeOffset.UtcNow;
+                flowRun.ErrorMessage = anyFailed ? "One or more steps failed" : null;
+                await db.SaveChangesAsync();
+                logger.LogInformation("RetryDemoFlow {flow_run_id} marked as {status}. trace_id={trace_id} correlation_id={correlation_id} timestamp_utc={timestamp_utc}",
+                    message.FlowRunId, flowRun.Status, traceId, message.CorrelationId, DateTimeOffset.UtcNow);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to update RetryDemoFlow run status. flow_run_id={flow_run_id}", message.FlowRunId);
+        }
+        return;
+    }
+}
+
+static async Task UpdateRetryFlowStep3Async(
+    string flowRunId,
+    string stepName,
+    FlowStepStatus status,
+    string? traceId,
+    string? spanId,
+    int retryAttempt,
+    int maxRetries,
+    string? errorMessage,
+    DateTimeOffset? completedAt,
+    IServiceScopeFactory scopeFactory,
+    ILogger logger)
+{
+    try
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<StateStoreDbContext>();
+        var step = await db.FlowStepRecords.FirstOrDefaultAsync(s => s.FlowRunId == flowRunId && s.StepName == stepName);
+        if (step is null) return;
+        step.Status = status;
+        step.TraceId ??= traceId;
+        step.SpanId ??= spanId;
+        step.RetryAttempt = retryAttempt;
+        step.MaxRetries = maxRetries;
+        if (status is FlowStepStatus.Running or FlowStepStatus.Retrying && step.StartedAt is null) step.StartedAt = DateTimeOffset.UtcNow;
+        if (completedAt.HasValue) step.CompletedAt = completedAt;
+        step.ErrorMessage = errorMessage;
+        await db.SaveChangesAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Failed to update retry-demo step 3. flow_run_id={flow_run_id} step_name={step_name}", flowRunId, stepName);
+    }
 }
 
 internal sealed record FlowStepMessage(

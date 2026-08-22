@@ -131,9 +131,33 @@ app.MapGet("/api/flow/{flowRunId}/status", async (string flowRunId, StateStoreDb
             s.CompletedAt,
             s.ErrorMessage,
             s.TraceId,
-            s.SpanId
+            s.SpanId,
+            s.RetryAttempt,
+            s.MaxRetries
         })
     });
+});
+
+// Proxy to start the retry-demo flow (WS1 /flow/retry-demo/start)
+app.MapPost("/api/flow/retry-demo/start", async (IHttpClientFactory httpClientFactory, ILogger<Program> logger, CancellationToken ct) =>
+{
+    try
+    {
+        var client = httpClientFactory.CreateClient("workerservice1");
+        var response = await client.PostAsync("/flow/retry-demo/start", content: null, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            logger.LogWarning("RetryDemo flow start failed. status_code={status_code}", response.StatusCode);
+            return Results.StatusCode((int)response.StatusCode);
+        }
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return Results.Content(body, "application/json");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Exception triggering retry-demo flow start");
+        return Results.Problem("Failed to start retry-demo flow");
+    }
 });
 
 app.MapRazorComponents<App>()
