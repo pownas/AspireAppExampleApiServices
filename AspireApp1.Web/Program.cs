@@ -27,10 +27,18 @@ builder.Services.AddHttpClient("workerservice1", client =>
     client.BaseAddress = new Uri("https+http://workerservice1");
 });
 
-// State-store database — used by the TraceQueryService to look up trace data.
+// State-store database — used by the TraceQueryService and Blazor pages to look up trace data.
+// AddDbContextFactory is used so Blazor Server components (timer callbacks, scoped circuits)
+// can create short-lived DbContext instances on demand without lifetime conflicts.
+var sqliteConnStr = builder.Configuration.GetConnectionString("statestore")
+    ?? $"Data Source={Path.Combine(Path.GetTempPath(), "AspireApp1StateStore", "statestore.db")}";
+
+builder.Services.AddDbContextFactory<StateStoreDbContext>(options =>
+    options.UseSqlite(sqliteConnStr));
+
+// Scoped AddDbContext derives from the factory so minimal-API endpoints (scoped DI) still work.
 builder.Services.AddDbContext<StateStoreDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("statestore")
-        ?? $"Data Source={Path.Combine(Path.GetTempPath(), "AspireApp1StateStore", "statestore.db")}"));
+    options.UseSqlite(sqliteConnStr));
 
 // TraceQueryService builds TraceModel objects from state-store records written by the worker services.
 builder.Services.AddScoped<TraceQueryService>();

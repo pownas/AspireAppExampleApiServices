@@ -3,9 +3,9 @@
 @implements IDisposable
 @using System.Net.Http.Json
 @using System.Text.Json
-@using System.Text.Json.Serialization
+@using Microsoft.EntityFrameworkCore
 @inject IHttpClientFactory HttpClientFactory
-@inject NavigationManager NavigationManager
+@inject IDbContextFactory<AspireApp1.StateStore.StateStoreDbContext> DbFactory
 @inject ILogger<FlowDemo> Logger
 
 <PageTitle>Flödesutlösare</PageTitle>
@@ -177,11 +177,10 @@
 
         try
         {
-            // Use the Web frontend's own proxy endpoint to avoid CORS / direct WS1 access.
-            // Relative URIs don't work on server-side HttpClient — build an absolute URL from NavigationManager.
-            var http = HttpClientFactory.CreateClient();
-            var startUri = new Uri(new Uri(NavigationManager.BaseUri), "api/flow/start");
-            var resp = await http.PostAsync(startUri, content: null);
+            // Use the named workerservice1 HttpClient — it has BaseAddress configured by Aspire
+            // service discovery and is callable from the server side (unlike the dev-proxy URL).
+            var http = HttpClientFactory.CreateClient("workerservice1");
+            var resp = await http.PostAsync("/flow/start", content: null);
             if (!resp.IsSuccessStatusCode)
             {
                 _errorMessage = $"Kunde inte starta flöde: HTTP {(int)resp.StatusCode}";
@@ -234,37 +233,31 @@
 
         try
         {
-            var http = HttpClientFactory.CreateClient();
-            var statusUri = new Uri(new Uri(NavigationManager.BaseUri), $"api/flow/{_flowRunId}/status");
-            var resp = await http.GetAsync(statusUri);
-            if (!resp.IsSuccessStatusCode) return;
+            await using var db = await DbFactory.CreateDbContextAsync();
 
-            using var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>();
-            if (doc is null) return;
+            var flowRun = await db.FlowRunRecords
+                .FirstOrDefaultAsync(r => r.FlowRunId == _flowRunId);
+            if (flowRun is null) return;
 
-            var root = doc.RootElement;
-            _flowStatus = root.TryGetProperty("status", out var s) ? s.GetString() : _flowStatus;
+            _flowStatus = flowRun.Status.ToString();
+            if (flowRun.CorrelationId is not null) _correlationId = flowRun.CorrelationId;
+            if (flowRun.TraceId is not null) _traceId = flowRun.TraceId;
 
-            if (root.TryGetProperty("steps", out var stepsEl))
+            var steps = await db.FlowStepRecords
+                .Where(s => s.FlowRunId == _flowRunId)
+                .OrderBy(s => s.StepOrder)
+                .ToListAsync();
+
+            _steps = steps.Select(s => new FlowStepDto
             {
-                _steps = [];
-                foreach (var stepEl in stepsEl.EnumerateArray())
-                {
-                    _steps.Add(new FlowStepDto
-                    {
-                        StepName = stepEl.TryGetProperty("stepName", out var n) ? n.GetString() ?? "" : "",
-                        ServiceName = stepEl.TryGetProperty("serviceName", out var svc) ? svc.GetString() ?? "" : "",
-                        StepOrder = stepEl.TryGetProperty("stepOrder", out var ord) ? ord.GetInt32() : 0,
-                        Status = stepEl.TryGetProperty("status", out var st) ? st.GetString() ?? "" : "",
-                        StartedAt = stepEl.TryGetProperty("startedAt", out var sta) && sta.ValueKind != JsonValueKind.Null
-                            ? sta.GetDateTimeOffset() : (DateTimeOffset?)null,
-                        CompletedAt = stepEl.TryGetProperty("completedAt", out var cmp) && cmp.ValueKind != JsonValueKind.Null
-                            ? cmp.GetDateTimeOffset() : (DateTimeOffset?)null,
-                        ErrorMessage = stepEl.TryGetProperty("errorMessage", out var err) && err.ValueKind != JsonValueKind.Null
-                            ? err.GetString() : null,
-                    });
-                }
-            }
+                StepName = s.StepName,
+                ServiceName = s.ServiceName,
+                StepOrder = s.StepOrder,
+                Status = s.Status.ToString(),
+                StartedAt = s.StartedAt,
+                CompletedAt = s.CompletedAt,
+                ErrorMessage = s.ErrorMessage,
+            }).ToList();
 
             if (_flowStatus is "Completed" or "Failed")
             {
