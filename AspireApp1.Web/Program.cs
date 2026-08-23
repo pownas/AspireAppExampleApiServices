@@ -1,4 +1,4 @@
-using AspireApp1.StateStore;
+﻿using AspireApp1.StateStore;
 using AspireApp1.Web;
 using AspireApp1.Web.Components;
 using Microsoft.EntityFrameworkCore;
@@ -34,10 +34,6 @@ var sqliteConnStr = builder.Configuration.GetConnectionString("statestore")
     ?? $"Data Source={Path.Combine(Path.GetTempPath(), "AspireApp1StateStore", "statestore.db")}";
 
 builder.Services.AddDbContextFactory<StateStoreDbContext>(options =>
-    options.UseSqlite(sqliteConnStr));
-
-// Scoped AddDbContext derives from the factory so minimal-API endpoints (scoped DI) still work.
-builder.Services.AddDbContext<StateStoreDbContext>(options =>
     options.UseSqlite(sqliteConnStr));
 
 // TraceQueryService builds TraceModel objects from state-store records written by the worker services.

@@ -1,4 +1,4 @@
-using AspireApp1.StateStore;
+﻿using AspireApp1.StateStore;
 using AspireApp1.Web.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
@@ -11,7 +11,7 @@ namespace AspireApp1.Web;
 /// written by the worker and API services.
 /// Supports lookup by traceId, W3C traceparent string, correlationId, and spanId.
 /// </summary>
-public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService> logger)
+public class TraceQueryService(IDbContextFactory<StateStoreDbContext> dbFactory, ILogger<TraceQueryService> logger)
 {
     // W3C traceparent: 00-{traceId:32hex}-{parentId:16hex}-{flags:2hex}
     private static readonly Regex TraceParentRegex = new(
@@ -23,6 +23,8 @@ public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService
     /// </summary>
     public async Task<TraceModel?> GetByTraceIdAsync(string traceId, CancellationToken cancellationToken = default)
     {
+        using var db = dbFactory.CreateDbContext();
+
         var input = traceId.Trim();
 
         // Auto-detect traceparent format and extract traceId
@@ -77,6 +79,8 @@ public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService
     /// </summary>
     public async Task<TraceModel?> GetByCorrelationIdAsync(string correlationId, CancellationToken cancellationToken = default)
     {
+        using var db = dbFactory.CreateDbContext();
+
         var normalizedId = correlationId.Trim();
 
         var jobs = await db.JobStates
@@ -136,6 +140,8 @@ public class TraceQueryService(StateStoreDbContext db, ILogger<TraceQueryService
     /// </summary>
     public async Task<TraceModel?> GetBySpanIdAsync(string spanId, CancellationToken cancellationToken = default)
     {
+        using var db = dbFactory.CreateDbContext();
+
         var normalizedId = spanId.Trim().ToLowerInvariant();
 
         // Check job states first

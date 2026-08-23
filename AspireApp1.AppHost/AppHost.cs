@@ -1,4 +1,4 @@
-var builder = DistributedApplication.CreateBuilder(args);
+﻿var builder = DistributedApplication.CreateBuilder(args);
 
 // SQLite state store — shared file written to LocalApplicationData so it persists across restarts
 // without requiring Docker or any database server.
