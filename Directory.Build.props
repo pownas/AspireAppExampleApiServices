@@ -9,4 +9,14 @@
 
     <UseArtifactsOutput>true</UseArtifactsOutput>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      SQLitePCLRaw.lib.e_sqlite3 bundles a SQLite native binary that contains CVE-2022-35737.
+      The native binary was updated in 3.x (3.50.3+) but the EF Core 10 package graph still
+      resolves to 2.1.x. This is a dev/demo application; the risk is acceptable.
+      Advisory: https://github.com/advisories/GHSA-2m69-gcr7-jv3q
+    -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-2m69-gcr7-jv3q" />
+  </ItemGroup>
 </Project>

@@ -4,11 +4,15 @@
 
 @inject WeatherApiClient WeatherApi
 
-<PageTitle>ErrorCall</PageTitle>
+<PageTitle>Felscenario 1 – 404 från apierrorservice</PageTitle>
 
-<h1>ErrorCall</h1>
+<h1>Felscenario 1 – 404-fel via apierrorservice</h1>
 
-<p>This component demonstrates showing data loaded from a backend API service. Calling: https://apiservice/errorcall</p>
+<p>
+    Anropar <code>apiservice/errorcall</code> → <code>apiserviceforecast</code> → <code>apiservicestaticweather</code> → <code>apierrorservice</code>.
+    Tjänsten <code>apierrorservice</code> returnerar avsiktligt HTTP&nbsp;404, vilket sprids upp i anropskedjan som ett felscenario.
+    Öppna <strong>Aspire Dashboard → Traces</strong> för att se felspridningen som röda spans.
+</p>
 
 @if (forecasts == null)
 {

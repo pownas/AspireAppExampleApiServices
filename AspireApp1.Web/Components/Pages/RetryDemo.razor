@@ -1,0 +1,375 @@
+@page "/retrydemo"
+@rendermode InteractiveServer
+@implements IDisposable
+@using System.Net.Http.Json
+@using System.Text.Json
+@using Microsoft.EntityFrameworkCore
+@inject IHttpClientFactory HttpClientFactory
+@inject IDbContextFactory<AspireApp1.StateStore.StateStoreDbContext> DbFactory
+@inject ILogger<RetryDemo> Logger
+
+<PageTitle>Återförsöksflöde</PageTitle>
+
+<h1>Återförsöksflöde</h1>
+<p class="lead text-muted">
+    Demonstrerar distribuerade återförsök: varje steg misslyckas <strong>två gånger</strong> med ett simulerat fel och
+    lyckas sedan på <strong>tredje försöket</strong>. Hela körningen tar ca&nbsp;1 minut.
+    Sök sedan på TraceId eller CorrelationId i Processflöde för att se alla felaktiga och lyckade span.
+</p>
+
+<!-- Architecture / retry diagram -->
+<div class="card mb-4 border-0 bg-light">
+    <div class="card-body">
+        <div class="d-flex flex-wrap gap-2 align-items-center justify-content-center font-monospace small">
+            <span class="badge bg-primary px-2 py-1">Web → /flow/retry-demo/start</span>
+            <span>→</span>
+            <div class="d-flex flex-column align-items-center gap-1">
+                <span class="badge bg-danger px-2 py-1">WS1 ❌ försök 1</span>
+                <span class="badge bg-danger px-2 py-1">WS1 ❌ försök 2</span>
+                <span class="badge bg-success px-2 py-1">WS1 ✅ försök 3</span>
+            </div>
+            <span>⇢</span>
+            <div class="d-flex flex-column align-items-center gap-1">
+                <span class="badge bg-danger px-2 py-1">WS2 ❌ försök 1</span>
+                <span class="badge bg-danger px-2 py-1">WS2 ❌ försök 2</span>
+                <span class="badge bg-success px-2 py-1">WS2 ✅ försök 3</span>
+            </div>
+            <span>⇢</span>
+            <div class="d-flex flex-column align-items-center gap-1">
+                <span class="badge bg-danger px-2 py-1">WS3 ❌ försök 1</span>
+                <span class="badge bg-danger px-2 py-1">WS3 ❌ försök 2</span>
+                <span class="badge bg-success px-2 py-1">WS3 ✅ försök 3</span>
+            </div>
+        </div>
+        <p class="text-center text-muted small mt-2 mb-0">
+            10 s fördröjning mellan varje återförsök per steg → ~20 s per steg → ~60 s totalt.
+        </p>
+    </div>
+</div>
+
+<div class="mb-3">
+    <button class="btn btn-warning btn-lg" @onclick="StartFlow" disabled="@(_isRunning || _isPolling)">
+        @if (_isRunning)
+        {
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            <span>Startar…</span>
+        }
+        else if (_isPolling)
+        {
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            <span>Pågår…</span>
+        }
+        else
+        {
+            <span class="bi bi-arrow-repeat me-1" aria-hidden="true"></span>
+            <span>Starta återförsöksflöde (~60 s)</span>
+        }
+    </button>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="alert alert-danger">@_errorMessage</div>
+}
+
+@if (_flowRunId is not null)
+{
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><strong>Flödeskörning</strong></span>
+            <span class="badge fs-6 @GetStatusBadgeClass(_flowStatus)">
+                @GetStatusEmoji(_flowStatus) @_flowStatus
+            </span>
+        </div>
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3">Flow Run ID</dt>
+                <dd class="col-sm-9 font-monospace small">@_flowRunId</dd>
+                @if (_correlationId is not null)
+                {
+                    <dt class="col-sm-3">Correlation ID</dt>
+                    <dd class="col-sm-9 font-monospace small">@_correlationId</dd>
+                }
+                @if (_traceId is not null)
+                {
+                    <dt class="col-sm-3">Trace ID</dt>
+                    <dd class="col-sm-9 font-monospace small">@_traceId</dd>
+                }
+            </dl>
+        </div>
+    </div>
+
+    @if (_steps.Count > 0)
+    {
+        <table class="table table-sm table-bordered table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>Steg</th>
+                    <th>Tjänst</th>
+                    <th>Försök</th>
+                    <th>Status</th>
+                    <th>Varaktighet</th>
+                    <th>Senaste fel</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var step in _steps)
+                {
+                    <tr class="@GetStepRowClass(step.Status)">
+                        <td>@step.StepOrder</td>
+                        <td class="font-monospace small">@step.StepName</td>
+                        <td><span class="badge bg-secondary">@step.ServiceName</span></td>
+                        <td class="text-center">
+                            @if (step.MaxRetries > 0)
+                            {
+                                @for (var i = 1; i <= step.MaxRetries; i++)
+                                {
+                                    var attempt = i;
+                                    @if (attempt < step.RetryAttempt)
+                                    {
+                                        <span title="Försök @attempt misslyckades">❌</span>
+                                    }
+                                    else if (attempt == step.RetryAttempt && step.Status == "Completed")
+                                    {
+                                        <span title="Försök @attempt lyckades">✅</span>
+                                    }
+                                    else if (attempt == step.RetryAttempt)
+                                    {
+                                        <span title="Försök @attempt pågår">🔄</span>
+                                    }
+                                    else
+                                    {
+                                        <span title="Försök @attempt ej påbörjat" class="text-muted">⬜</span>
+                                    }
+                                }
+                                <span class="text-muted small ms-1">@step.RetryAttempt/@step.MaxRetries</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">–</span>
+                            }
+                        </td>
+                        <td>
+                            <span>@GetStatusEmoji(step.Status)</span>
+                            <span>@step.Status</span>
+                        </td>
+                        <td class="font-monospace small">@FormatDuration(step.StartedAt, step.CompletedAt)</td>
+                        <td class="text-danger small">@step.ErrorMessage</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @if (_isPolling)
+    {
+        <div class="text-muted small mb-2">
+            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            Hämtar status automatiskt var 3:e sekund…
+        </div>
+    }
+
+    @if (_flowStatus is "Completed" or "Failed")
+    {
+        <div class="alert @(_flowStatus == "Completed" ? "alert-success" : "alert-warning") mt-2">
+            <strong>@(_flowStatus == "Completed" ? "✅ Flödet är klart – alla tre steg lyckades på tredje försöket!" : "⚠️ Flödet avslutades med fel.")</strong>
+            Sök i Processflöde för att visualisera alla återförsöks-span:
+            <div class="mt-2 d-flex flex-wrap gap-2">
+                @if (_correlationId is not null)
+                {
+                    <a class="btn btn-primary btn-sm"
+                       href="/processflow?correlationId=@Uri.EscapeDataString(_correlationId)">
+                        <span class="bi bi-diagram-3-fill me-1" aria-hidden="true"></span>
+                        Visa via Correlation ID
+                    </a>
+                }
+                @if (_traceId is not null)
+                {
+                    <a class="btn btn-outline-primary btn-sm"
+                       href="/processflow?traceId=@Uri.EscapeDataString(_traceId)">
+                        <span class="bi bi-diagram-3-fill me-1" aria-hidden="true"></span>
+                        Visa via Trace ID
+                    </a>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private bool _isRunning;
+    private bool _isPolling;
+    private string? _flowRunId;
+    private string? _correlationId;
+    private string? _traceId;
+    private string? _flowStatus;
+    private string? _errorMessage;
+    private List<FlowStepDto> _steps = [];
+
+    private System.Threading.Timer? _pollTimer;
+
+    private async Task StartFlow()
+    {
+        _isRunning = true;
+        _errorMessage = null;
+        _flowRunId = null;
+        _correlationId = null;
+        _traceId = null;
+        _flowStatus = null;
+        _steps = [];
+
+        try
+        {
+            // Use the named workerservice1 client — BaseAddress is set by Aspire service discovery.
+            var http = HttpClientFactory.CreateClient("workerservice1");
+            var resp = await http.PostAsync("/flow/retry-demo/start", content: null);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _errorMessage = $"Kunde inte starta återförsöksflöde: HTTP {(int)resp.StatusCode}";
+                return;
+            }
+
+            using var doc = await resp.Content.ReadFromJsonAsync<JsonDocument>();
+            if (doc is null)
+            {
+                _errorMessage = "Ogiltigt svar från flödesstart.";
+                return;
+            }
+
+            var root = doc.RootElement;
+            _flowRunId = root.TryGetProperty("flowRunId", out var fid) ? fid.GetString() : null;
+            _correlationId = root.TryGetProperty("correlationId", out var cid) ? cid.GetString() : null;
+            _traceId = root.TryGetProperty("traceId", out var tid) ? tid.GetString() : null;
+            _flowStatus = "Running";
+
+            if (_flowRunId is not null)
+            {
+                StartPolling();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error starting retry-demo flow");
+            _errorMessage = $"Fel: {ex.Message}";
+        }
+        finally
+        {
+            _isRunning = false;
+        }
+    }
+
+    private void StartPolling()
+    {
+        _isPolling = true;
+        _pollTimer?.Dispose();
+        _pollTimer = new System.Threading.Timer(
+            _ => InvokeAsync(PollStatus),
+            state: null,
+            dueTime: TimeSpan.FromSeconds(2),
+            period: TimeSpan.FromSeconds(3));
+    }
+
+    private async Task PollStatus()
+    {
+        if (_flowRunId is null) return;
+
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+
+            var flowRun = await db.FlowRunRecords
+                .FirstOrDefaultAsync(r => r.FlowRunId == _flowRunId);
+            if (flowRun is null) return;
+
+            _flowStatus = flowRun.Status.ToString();
+            if (flowRun.CorrelationId is not null) _correlationId = flowRun.CorrelationId;
+            if (flowRun.TraceId is not null) _traceId = flowRun.TraceId;
+
+            var steps = await db.FlowStepRecords
+                .Where(s => s.FlowRunId == _flowRunId)
+                .OrderBy(s => s.StepOrder)
+                .ToListAsync();
+
+            _steps = steps.Select(s => new FlowStepDto
+            {
+                StepName = s.StepName,
+                ServiceName = s.ServiceName,
+                StepOrder = s.StepOrder,
+                Status = s.Status.ToString(),
+                RetryAttempt = s.RetryAttempt,
+                MaxRetries = s.MaxRetries,
+                StartedAt = s.StartedAt,
+                CompletedAt = s.CompletedAt,
+                ErrorMessage = s.ErrorMessage,
+            }).ToList();
+
+            if (_flowStatus is "Completed" or "Failed")
+            {
+                _isPolling = false;
+                _pollTimer?.Dispose();
+                _pollTimer = null;
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error polling retry-demo flow status");
+        }
+    }
+
+    private static string GetStatusEmoji(string? status) => status switch
+    {
+        "Completed" => "✅",
+        "Failed" => "❌",
+        "Running" => "🔄",
+        "Retrying" => "🔁",
+        "Pending" => "⏳",
+        _ => "❓"
+    };
+
+    private static string GetStatusBadgeClass(string? status) => status switch
+    {
+        "Completed" => "bg-success",
+        "Failed" => "bg-danger",
+        "Running" => "bg-warning text-dark",
+        "Retrying" => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+
+    private static string GetStepRowClass(string? status) => status switch
+    {
+        "Failed" => "table-danger",
+        "Running" => "table-warning",
+        "Retrying" => "table-warning",
+        "Completed" => "table-success",
+        _ => ""
+    };
+
+    private static string FormatDuration(DateTimeOffset? start, DateTimeOffset? end)
+    {
+        if (start is null) return "–";
+        if (end is null) return "pågår…";
+        var d = end.Value - start.Value;
+        return d.TotalSeconds >= 1 ? $"{d.TotalSeconds:F1}s" : $"{d.TotalMilliseconds:F0}ms";
+    }
+
+    public void Dispose()
+    {
+        _pollTimer?.Dispose();
+    }
+
+    private record FlowStepDto
+    {
+        public string StepName { get; init; } = "";
+        public string ServiceName { get; init; } = "";
+        public int StepOrder { get; init; }
+        public string Status { get; init; } = "";
+        public int RetryAttempt { get; init; }
+        public int MaxRetries { get; init; }
+        public DateTimeOffset? StartedAt { get; init; }
+        public DateTimeOffset? CompletedAt { get; init; }
+        public string? ErrorMessage { get; init; }
+    }
+}

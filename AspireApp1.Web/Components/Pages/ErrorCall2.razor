@@ -4,11 +4,15 @@
 
 @inject WeatherApiClient WeatherApi
 
-<PageTitle>ErrorCall</PageTitle>
+<PageTitle>Felscenario 2 – 500 från apiexternalservice</PageTitle>
 
-<h1>ErrorCall</h1>
+<h1>Felscenario 2 – 500-fel via apiexternalservice</h1>
 
-<p>This component demonstrates showing data loaded from a backend API service. Calling: https://apiservice/errorcall2</p>
+<p>
+    Anropar <code>apiservice/errorcall2</code> → <code>apiserviceforecast</code> → <code>apiexternalservice</code>.
+    Tjänsten <code>apiexternalservice</code> returnerar avsiktligt HTTP&nbsp;500, vilket sprids upp som ett serverfel i anropskedjan.
+    Öppna <strong>Aspire Dashboard → Traces</strong> för att se hur felet syns i de distribuerade spannen.
+</p>
 
 @if (forecasts == null)
 {

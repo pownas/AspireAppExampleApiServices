@@ -12,16 +12,16 @@ builder.Services.AddProblemDetails();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-// Add HttpClientFactory for calling other apiServiceForecast
-builder.Services.AddHttpClient("apiServiceForecast", client =>
+// Add HttpClientFactory for calling other apiserviceforecast
+builder.Services.AddHttpClient("apiserviceforecast", client =>
 {
-    client.BaseAddress = new Uri("http://apiServiceForecast");
+    client.BaseAddress = new Uri("https+http://apiserviceforecast");
 });
 
 // Add HttpClientFactory for calling apierrorservice
 builder.Services.AddHttpClient("apierrorservice", client =>
 {
-    client.BaseAddress = new Uri("http://apierrorservice");
+    client.BaseAddress = new Uri("https+http://apierrorservice");
 });
 
 var app = builder.Build();
@@ -51,8 +51,8 @@ app.MapGet("/weatherforecast", async (IHttpClientFactory httpClientFactory, ILog
         ))
         .ToArray();
 
-    // Call apiServiceForecast
-    var httpClient = httpClientFactory.CreateClient("apiServiceForecast");
+    // Call apiserviceforecast
+    var httpClient = httpClientFactory.CreateClient("apiserviceforecast");
     try
     {
         using var callForecastActivity = activitySource.StartActivity("ApiService.CallApiServiceForecast", ActivityKind.Internal);
@@ -60,8 +60,8 @@ app.MapGet("/weatherforecast", async (IHttpClientFactory httpClientFactory, ILog
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
-            logger.LogInformation("apiServiceForecast response content. response_content={response_content}", content);
-            logger.LogInformation("apiServiceForecast response retrieved. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+            logger.LogInformation("apiserviceforecast response content. response_content={response_content}", content);
+            logger.LogInformation("apiserviceforecast response retrieved. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),
                 Activity.Current?.ParentSpanId.ToString(),
@@ -76,7 +76,7 @@ app.MapGet("/weatherforecast", async (IHttpClientFactory httpClientFactory, ILog
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Error calling apiServiceForecast. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+        logger.LogError(ex, "Error calling apiserviceforecast. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
             Activity.Current?.TraceId.ToString(),
             Activity.Current?.SpanId.ToString(),
             Activity.Current?.ParentSpanId.ToString(),
@@ -103,17 +103,17 @@ app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory, ILogger<Pr
         ))
         .ToArray();
 
-    // Call apiServiceForecast
-    var httpClient = httpClientFactory.CreateClient("apiServiceForecast");
+    // Call apiserviceforecast
+    var httpClient = httpClientFactory.CreateClient("apiserviceforecast");
     try
     {
-        using var errorFlowActivity = activitySource.StartActivity("ApiService.ErrorFlowViaForecast", ActivityKind.Internal);
+        using var errorFlowActivity = activitySource.StartActivity("Apiserviceforecast.ErrorFlowViaForecast", ActivityKind.Internal);
         var response = await httpClient.GetAsync("/errorcall");
         if (response.IsSuccessStatusCode)
         {
             var content = await response.Content.ReadAsStringAsync();
-            logger.LogInformation("Error flow response content from apiServiceForecast. response_content={response_content}", content);
-            logger.LogInformation("Error flow response received from apiServiceForecast. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+            logger.LogInformation("Error flow response content from apiserviceforecast. response_content={response_content}", content);
+            logger.LogInformation("Error flow response received from apiserviceforecast. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),
                 Activity.Current?.ParentSpanId.ToString(),
@@ -124,7 +124,7 @@ app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory, ILogger<Pr
         else
         {
             errorFlowActivity?.SetStatus(ActivityStatusCode.Error, $"Status code: {response.StatusCode}");
-            logger.LogError("Error flow failed in apiServiceForecast call. status_code={status_code} trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+            logger.LogError("Error flow failed in apiserviceforecast call. status_code={status_code} trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
                 response.StatusCode,
                 Activity.Current?.TraceId.ToString(),
                 Activity.Current?.SpanId.ToString(),
@@ -136,7 +136,7 @@ app.MapGet("/errorcall", async (IHttpClientFactory httpClientFactory, ILogger<Pr
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Error flow exception in apiServiceForecast call. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
+        logger.LogError(ex, "Error flow exception in apiserviceforecast call. trace_id={trace_id} span_id={span_id} parent_span_id={parent_span_id} service.name={service_name} timestamp_utc={timestamp_utc} correlation_id={correlation_id}",
             Activity.Current?.TraceId.ToString(),
             Activity.Current?.SpanId.ToString(),
             Activity.Current?.ParentSpanId.ToString(),
@@ -165,7 +165,7 @@ app.MapGet("/errorcall2", async (IHttpClientFactory httpClientFactory, ILogger<P
     var httpClient = httpClientFactory.CreateClient("apierrorservice");
     try
     {
-        using var errorFlowActivity = activitySource.StartActivity("ApiService.ErrorFlowDirect", ActivityKind.Internal);
+        using var errorFlowActivity = activitySource.StartActivity("apierrorservice.ErrorFlowDirect", ActivityKind.Internal);
         var response = await httpClient.GetAsync("/err");
         if (response.IsSuccessStatusCode)
         {
