@@ -3,8 +3,10 @@ namespace AspireApp1.WorkerService1;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using AspireApp1.ServiceDefaults;
 using AspireApp1.StateStore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 /// <summary>
 /// A background service that periodically initiates a chain of work across worker services.
@@ -15,7 +17,8 @@ public class PeriodicChainTrigger(
     ILogger<PeriodicChainTrigger> logger,
     IHttpClientFactory httpClientFactory,
     IHostEnvironment hostEnvironment,
-    IServiceScopeFactory scopeFactory) : BackgroundService
+    IServiceScopeFactory scopeFactory,
+    IOptions<ServiceSettings> settings) : BackgroundService
 {
     private static readonly ActivitySource activitySource = new("AspireApp1.WorkerService1.Chain");
     private static readonly TimeSpan TriggerInterval = TimeSpan.FromSeconds(30);
@@ -43,13 +46,16 @@ public class PeriodicChainTrigger(
 
         var traceId = Activity.Current?.TraceId.ToString();
 
-        logger.LogInformation("Chain trigger started. trace_id={trace_id} span_id={span_id} service.name={service_name} correlation_id={correlation_id} chain_run_id={chain_run_id} timestamp_utc={timestamp_utc}",
-            traceId,
-            Activity.Current?.SpanId.ToString(),
-            hostEnvironment.ApplicationName,
-            correlationId,
-            chainRunId,
-            DateTimeOffset.UtcNow);
+        if (settings.Value.EnableVerboseStatusLogs)
+        {
+            logger.LogInformation("Chain trigger started. trace_id={trace_id} span_id={span_id} service.name={service_name} correlation_id={correlation_id} chain_run_id={chain_run_id} timestamp_utc={timestamp_utc}",
+                traceId,
+                Activity.Current?.SpanId.ToString(),
+                hostEnvironment.ApplicationName,
+                correlationId,
+                chainRunId,
+                DateTimeOffset.UtcNow);
+        }
 
         await PersistChainRunAsync(chainRunId, correlationId, traceId, ChainRunStatus.Running, null, stoppingToken);
 
@@ -65,13 +71,16 @@ public class PeriodicChainTrigger(
 
             await PersistChainRunAsync(chainRunId, correlationId, traceId, ChainRunStatus.Completed, DateTimeOffset.UtcNow, stoppingToken);
 
-            logger.LogInformation("Chain trigger completed. trace_id={trace_id} span_id={span_id} service.name={service_name} correlation_id={correlation_id} chain_run_id={chain_run_id} timestamp_utc={timestamp_utc}",
-                traceId,
-                Activity.Current?.SpanId.ToString(),
-                hostEnvironment.ApplicationName,
-                correlationId,
-                chainRunId,
-                DateTimeOffset.UtcNow);
+            if (settings.Value.EnableVerboseStatusLogs)
+            {
+                logger.LogInformation("Chain trigger completed. trace_id={trace_id} span_id={span_id} service.name={service_name} correlation_id={correlation_id} chain_run_id={chain_run_id} timestamp_utc={timestamp_utc}",
+                    traceId,
+                    Activity.Current?.SpanId.ToString(),
+                    hostEnvironment.ApplicationName,
+                    correlationId,
+                    chainRunId,
+                    DateTimeOffset.UtcNow);
+            }
         }
         catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
         {
@@ -106,12 +115,15 @@ public class PeriodicChainTrigger(
 
             if (response.IsSuccessStatusCode)
             {
-                logger.LogInformation("Chain trigger forwarded job to {target_service}. job_id={job_id} trace_id={trace_id} correlation_id={correlation_id} timestamp_utc={timestamp_utc}",
-                    targetService,
-                    jobId,
-                    Activity.Current?.TraceId.ToString(),
-                    correlationId,
-                    DateTimeOffset.UtcNow);
+                if (settings.Value.EnableVerboseStatusLogs)
+                {
+                    logger.LogInformation("Chain trigger forwarded job to {target_service}. job_id={job_id} trace_id={trace_id} correlation_id={correlation_id} timestamp_utc={timestamp_utc}",
+                        targetService,
+                        jobId,
+                        Activity.Current?.TraceId.ToString(),
+                        correlationId,
+                        DateTimeOffset.UtcNow);
+                }
             }
             else
             {

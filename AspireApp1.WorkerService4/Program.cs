@@ -1,3 +1,4 @@
+using AspireApp1.ServiceDefaults;
 using AspireApp1.StateStore;
 using AspireApp1.WorkerService4;
 using Microsoft.EntityFrameworkCore;
@@ -6,6 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.Services.AddProblemDetails();
+builder.Services.Configure<ServiceSettings>(builder.Configuration.GetSection(ServiceSettings.SectionName));
 builder.Services.AddHostedService<StatusMonitor>();
 builder.Services.AddHttpClient("workerservice1", client =>
 {

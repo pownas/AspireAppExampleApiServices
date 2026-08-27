@@ -2,7 +2,9 @@ namespace AspireApp1.WorkerService4;
 
 using System.Diagnostics;
 using System.Net;
+using AspireApp1.ServiceDefaults;
 using AspireApp1.StateStore;
+using Microsoft.Extensions.Options;
 
 /// <summary>
 /// Periodically polls the health endpoints of WorkerService1, WorkerService2, and WorkerService3,
@@ -12,7 +14,8 @@ public class StatusMonitor(
     ILogger<StatusMonitor> logger,
     IHttpClientFactory httpClientFactory,
     IHostEnvironment hostEnvironment,
-    IServiceScopeFactory scopeFactory) : BackgroundService
+    IServiceScopeFactory scopeFactory,
+    IOptions<ServiceSettings> settings) : BackgroundService
 {
     private static readonly ActivitySource activitySource = new("AspireApp1.WorkerService4");
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
@@ -35,9 +38,12 @@ public class StatusMonitor(
         using var pollActivity = activitySource.StartActivity("StatusMonitor.Poll", ActivityKind.Client);
         pollActivity?.SetTag("service.name", hostEnvironment.ApplicationName);
 
-        logger.LogInformation("StatusMonitor polling worker services. service.name={service_name} timestamp_utc={timestamp_utc}",
-            hostEnvironment.ApplicationName,
-            DateTimeOffset.UtcNow);
+        if (settings.Value.EnableVerboseStatusLogs)
+        {
+            logger.LogInformation("StatusMonitor polling worker services. service.name={service_name} timestamp_utc={timestamp_utc}",
+                hostEnvironment.ApplicationName,
+                DateTimeOffset.UtcNow);
+        }
 
         foreach (var serviceName in MonitoredServices)
         {
@@ -64,11 +70,14 @@ public class StatusMonitor(
 
             if (isHealthy)
             {
-                logger.LogInformation("StatusMonitor: {monitored_service} is healthy. status_code={status_code} service.name={service_name} timestamp_utc={timestamp_utc}",
-                    serviceName,
-                    statusCode,
-                    hostEnvironment.ApplicationName,
-                    DateTimeOffset.UtcNow);
+                if (settings.Value.EnableVerboseStatusLogs)
+                {
+                    logger.LogInformation("StatusMonitor: {monitored_service} is healthy. status_code={status_code} service.name={service_name} timestamp_utc={timestamp_utc}",
+                        serviceName,
+                        statusCode,
+                        hostEnvironment.ApplicationName,
+                        DateTimeOffset.UtcNow);
+                }
             }
             else
             {
