@@ -3,11 +3,9 @@
 @implements IDisposable
 
 @using AspireApp1.Web.Models
-@using System.Net.Http.Json
-@using System.Text.Json
 @using System.Text.RegularExpressions
 @inject TraceQueryService TraceQuery
-@inject IHttpClientFactory HttpClientFactory
+@inject FlowRestartService FlowRestartService
 @inject ILogger<ProcessFlow> Logger
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JS
@@ -448,25 +446,16 @@ else if (currentTrace is not null)
 
         try
         {
-            var http = HttpClientFactory.CreateClient("webfrontend");
-            var response = await http.PostAsync($"/api/flow/{Uri.EscapeDataString(flow.FlowRunId)}/restart", content: null);
-            if (!response.IsSuccessStatusCode)
+            var restartResult = await FlowRestartService.RestartFlowAsync(flow.FlowRunId, CancellationToken.None);
+            if (!restartResult.IsSuccess)
             {
-                _restartError = $"Kunde inte återstarta flöde (HTTP {(int)response.StatusCode}).";
+                _restartError = restartResult.ErrorMessage ?? "Kunde inte återstarta flödet.";
                 return;
             }
 
-            using var doc = await response.Content.ReadFromJsonAsync<JsonDocument>();
-            if (doc is null)
-            {
-                _restartError = "Ogiltigt svar vid återstart av flödet.";
-                return;
-            }
-
-            var root = doc.RootElement;
-            var newFlowRunId = root.TryGetProperty("flowRunId", out var flowRunIdElement) ? flowRunIdElement.GetString() : null;
-            var newTraceId = root.TryGetProperty("traceId", out var traceIdElement) ? traceIdElement.GetString() : null;
-            var newCorrelationId = root.TryGetProperty("correlationId", out var correlationIdElement) ? correlationIdElement.GetString() : null;
+            var newFlowRunId = restartResult.FlowRunId;
+            var newTraceId = restartResult.TraceId;
+            var newCorrelationId = restartResult.CorrelationId;
 
             if (!string.IsNullOrWhiteSpace(newTraceId))
             {

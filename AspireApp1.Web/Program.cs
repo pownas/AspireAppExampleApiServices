@@ -31,6 +31,7 @@ builder.Services.AddConfiguredStateStoreDbContextFactory(builder.Configuration);
 
 // TraceQueryService builds TraceModel objects from state-store records written by the worker services.
 builder.Services.AddScoped<TraceQueryService>();
+builder.Services.AddScoped<FlowRestartService>();
 
 var app = builder.Build();
 
@@ -209,45 +210,28 @@ app.MapGet("/api/flow/simulation/profiles", async (IHttpClientFactory httpClient
 // Restart a flow by starting a new run of the same flow type as an existing flowRunId.
 app.MapPost("/api/flow/{flowRunId}/restart", async (
     string flowRunId,
-    StateStoreDbContext db,
-    IHttpClientFactory httpClientFactory,
-    ILogger<Program> logger,
+    FlowRestartService flowRestartService,
     CancellationToken ct) =>
 {
-    var existingFlow = await db.FlowRunRecords
-        .AsNoTracking()
-        .FirstOrDefaultAsync(r => r.FlowRunId == flowRunId, ct);
-
-    if (existingFlow is null)
+    var restartResult = await flowRestartService.RestartFlowAsync(flowRunId, ct);
+    if (restartResult.IsSuccess)
     {
-        return Results.NotFound();
-    }
-
-    var targetPath = string.Equals(existingFlow.FlowName, "RetryDemoFlow", StringComparison.OrdinalIgnoreCase)
-        ? "/flow/retry-demo/start"
-        : string.Equals(existingFlow.FlowName, "IntermittentDemoFlow", StringComparison.OrdinalIgnoreCase)
-            ? "/flow/intermittent-demo/start"
-            : "/flow/start";
-
-    try
-    {
-        var client = httpClientFactory.CreateClient("workerservice1");
-        var response = await client.PostAsync(targetPath, content: null, ct);
-        if (!response.IsSuccessStatusCode)
+        return Results.Ok(new
         {
-            logger.LogWarning("Flow restart failed. source_flow_run_id={source_flow_run_id} target_path={target_path} status_code={status_code}",
-                flowRunId, targetPath, response.StatusCode);
-            return Results.StatusCode((int)response.StatusCode);
-        }
+            flowRunId = restartResult.FlowRunId,
+            traceId = restartResult.TraceId,
+            correlationId = restartResult.CorrelationId
+        });
+    }
 
-        var body = await response.Content.ReadAsStringAsync(ct);
-        return Results.Content(body, "application/json");
-    }
-    catch (Exception ex)
+    if (restartResult.StatusCode == StatusCodes.Status404NotFound)
     {
-        logger.LogError(ex, "Exception restarting flow. source_flow_run_id={source_flow_run_id} target_path={target_path}", flowRunId, targetPath);
-        return Results.Problem("Failed to restart flow");
+        return Results.NotFound(new { error = restartResult.ErrorMessage });
     }
+
+    return Results.Json(
+        new { error = restartResult.ErrorMessage ?? "Återstart misslyckades." },
+        statusCode: restartResult.StatusCode);
 });
 
 app.MapRazorComponents<App>()
