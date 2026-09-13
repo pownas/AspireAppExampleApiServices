@@ -3,11 +3,9 @@
 @implements IDisposable
 @using AspireApp1.StateStore
 @using AspireApp1.Web.Models
-@using System.Net.Http.Json
-@using System.Text.Json
 @using Microsoft.EntityFrameworkCore
 @inject IDbContextFactory<StateStoreDbContext> DbFactory
-@inject IHttpClientFactory HttpClientFactory
+@inject FlowRestartService FlowRestartService
 @inject ILogger<FlowRuns> Logger
 
 <PageTitle>Alla körningar</PageTitle>
@@ -246,19 +244,14 @@ else
 
         try
         {
-            var http = HttpClientFactory.CreateClient("webfrontend");
-            var response = await http.PostAsync($"/api/flow/{Uri.EscapeDataString(run.FlowRunId)}/restart", content: null);
-            if (!response.IsSuccessStatusCode)
+            var restartResult = await FlowRestartService.RestartFlowAsync(run.FlowRunId, CancellationToken.None);
+            if (!restartResult.IsSuccess)
             {
-                _restartError[run.FlowRunId] = $"Kunde inte återstarta flödet (HTTP {(int)response.StatusCode}).";
+                _restartError[run.FlowRunId] = restartResult.ErrorMessage ?? "Kunde inte återstarta flödet.";
                 return;
             }
 
-            using var doc = await response.Content.ReadFromJsonAsync<JsonDocument>();
-            var newRunId = doc?.RootElement.TryGetProperty("flowRunId", out var runIdElement) == true
-                ? runIdElement.GetString()
-                : null;
-            _restartFeedback[run.FlowRunId] = $"Ny körning startad{(string.IsNullOrWhiteSpace(newRunId) ? "." : $": {newRunId}")}";
+            _restartFeedback[run.FlowRunId] = $"Ny körning startad{(string.IsNullOrWhiteSpace(restartResult.FlowRunId) ? "." : $": {restartResult.FlowRunId}")}";
             await RefreshAsync();
         }
         catch (Exception ex)
