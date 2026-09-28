@@ -67,16 +67,11 @@
 }
 
 .flow-run-details {
-    max-height: 0;
-    overflow: hidden;
-    opacity: 0;
-    transition: max-height 220ms ease, opacity 180ms ease, padding 180ms ease;
-    padding: 0 1rem;
+    display: none;
 }
 
 .flow-run-details.open {
-    max-height: 60rem;
-    opacity: 1;
+    display: block;
     padding: 0.75rem 1rem 1rem;
 }
 
