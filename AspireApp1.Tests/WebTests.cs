@@ -13,7 +13,9 @@ public class WebTests
         // Arrange
         var cancellationToken = new CancellationTokenSource(DefaultTimeout).Token;
 
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AspireApp1_AppHost>(cancellationToken);
+        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AspireApp1_AppHost>(
+            ["--StateStore:Provider=Sqlite"],
+            cancellationToken);
         appHost.Services.AddLogging(logging =>
         {
             logging.SetMinimumLevel(LogLevel.Debug);

@@ -5,7 +5,7 @@ EnsureAspireEndpointPortsAreAvailable();
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-var stateStoreProvider = builder.Configuration["StateStore:Provider"] ?? "SqlServer";
+var stateStoreProvider = builder.Configuration["StateStore:Provider"] ?? "Sqlite";
 
 // SQLite state store fallback file used only when Provider=Sqlite.
 var dbDir = Path.Combine(

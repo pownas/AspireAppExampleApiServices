@@ -8,13 +8,13 @@ namespace AspireApp1.Tests;
 public class StateStoreDbRegistrationTests
 {
     [TestMethod]
-    public void ResolveProvider_DefaultsToSqlServer()
+    public void ResolveProvider_DefaultsToSqlite()
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection().Build();
 
         var provider = StateStoreDbRegistration.ResolveProvider(configuration);
 
-        Assert.AreEqual("sqlserver", provider);
+        Assert.AreEqual("sqlite", provider);
     }
 
     [TestMethod]

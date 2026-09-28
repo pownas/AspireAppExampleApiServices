@@ -82,8 +82,8 @@ Från Processflöde finns åtgärden **“Återstarta flöde”**:
 
 StateStore körs globalt via AppHost-konfiguration:
 
-- default: `SqlServer`
-- alternativ: `Sqlite`
+- default: `Sqlite`
+- alternativ: `SqlServer`
 
 Databasen/schema skapas automatiskt vid startup om den saknas.
 

@@ -42,7 +42,7 @@ public static class StateStoreDbRegistration
             return SqliteProvider;
         }
 
-        return SqlServerProvider;
+        return SqliteProvider;
     }
 
     public static string ResolveConnectionString(IConfiguration configuration, string provider)
