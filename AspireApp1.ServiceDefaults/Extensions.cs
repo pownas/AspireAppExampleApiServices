@@ -111,13 +111,13 @@ public static class Extensions
         var samplerArgument = ReadSamplerArgument(configuration);
         return samplerName.Trim().ToLowerInvariant() switch
         {
-            "always_on" => AlwaysOnSampler.Instance,
-            "always_off" => AlwaysOffSampler.Instance,
+            "always_on" => new AlwaysOnSampler(),
+            "always_off" => new AlwaysOffSampler(),
             "traceidratio" => new TraceIdRatioBasedSampler(samplerArgument),
-            "parentbased_always_on" => new ParentBasedSampler(AlwaysOnSampler.Instance),
-            "parentbased_always_off" => new ParentBasedSampler(AlwaysOffSampler.Instance),
+            "parentbased_always_on" => new ParentBasedSampler(new AlwaysOnSampler()),
+            "parentbased_always_off" => new ParentBasedSampler(new AlwaysOffSampler()),
             "parentbased_traceidratio" => new ParentBasedSampler(new TraceIdRatioBasedSampler(samplerArgument)),
-            _ => new ParentBasedSampler(AlwaysOnSampler.Instance)
+            _ => new ParentBasedSampler(new AlwaysOnSampler())
         };
     }
 
