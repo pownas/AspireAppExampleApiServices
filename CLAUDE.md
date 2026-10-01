@@ -32,6 +32,7 @@ Målet är att kunna:
     - Alla körningar (`/flowruns`)
     - Flödesutlösare (`/flowdemo`)
     - Återförsöksflöde (`/retrydemo`)
+    - Insikter (`/insights`)
   - API-proxy för trace-uppslag och flödeskontroll (start/restart/status).
 
 - `AspireApp1.StateStore`
@@ -91,7 +92,10 @@ Databasen/schema skapas automatiskt vid startup om den saknas.
 
 - **Home**: arkitektur + tjänstehälsa + live-statistik
 - **FlowRuns**: tydlig lista över körningar, stegstatus och spårningslänkar
-- **ProcessFlow**: detaljerad stegvy/tidslinje, felmarkeringar, expand/collapse, restart
+- **ProcessFlow**: detaljerad stegvy/tidslinje (tidsaxel, förälder–barn-indrag, kritisk väg), felmarkeringar, expand/collapse, restart
+- **Insikter** (`/insights`): trender över många körningar – var flöden fastnar, flödestrend, hälsotidslinje, beroendediagram från verklig trafik, svarstider (P50/P95), retry-statistik, jobbkö och kedjekörningar. Aggregering i `Insights/InsightsCalculator.cs` (ren logik, enhetstestad), diagram som inline-SVG i `Components/Shared/Insights/`.
+
+**SQLite-regel:** SQLite kan inte `ORDER BY`/jämföra `DateTimeOffset` i SQL. Sortera på `Id` i databasen och på datum i minnet (se `QueryableExtensions.ToListOrderedByAsync`), och testa nya frågor mot SQLite (`AspireApp1.Tests/SqliteTestDatabase.cs`).
 
 ## 8) Snabbstart för utvecklare
 
@@ -113,6 +117,10 @@ Databasen/schema skapas automatiskt vid startup om den saknas.
 - `AspireApp1.Web/Components/Pages/Home.razor`
 - `AspireApp1.Web/Components/Pages/FlowRuns.razor`
 - `AspireApp1.Web/Components/Pages/ProcessFlow.razor`
+- `AspireApp1.Web/Components/Pages/Insights.razor`
+- `AspireApp1.Web/Insights/InsightsCalculator.cs`
+- `AspireApp1.Web/Insights/InsightsQueryService.cs`
+- `AspireApp1.Web/Models/GanttLayoutCalculator.cs`
 
 ## 10) Kommentarer i koden
 Kommentera gärna publika och privata metoder med syfte, parametrar och returvärden. Använd XML-kommentarer (summary och remarks) för att kunna generera dokumentation.

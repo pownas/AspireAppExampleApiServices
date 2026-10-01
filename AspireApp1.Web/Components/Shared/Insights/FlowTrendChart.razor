@@ -1,0 +1,81 @@
+@using AspireApp1.Web.Insights
+@* Stacked columns: flow runs started per time bucket, split into completed / failed / running. *@
+
+@if (Buckets.Count == 0 || Buckets.All(b => b.Total == 0))
+{
+    <p class="insight-empty">Inga flödeskörningar i perioden. Starta ett flöde under Flödesutlösare.</p>
+}
+else
+{
+    var max = Buckets.Max(b => b.Total);
+    var scaleMax = NiceCeiling(max);
+    var columnWidth = (double)PlotWidth / Buckets.Count;
+    var includeDate = (Buckets[^1].End - Buckets[0].Start) > TimeSpan.FromHours(24);
+    var labelEvery = Math.Max(1, Buckets.Count / 4);
+
+    <svg class="insight-svg" viewBox="0 0 @Width @Height" role="img" aria-label="Flödeskörningar per tidsintervall">
+        @for (var t = 0; t <= 4; t++)
+        {
+            var value = scaleMax * t / 4.0;
+            var y = PlotBottom - value / scaleMax * PlotHeight;
+            <g>
+                <line class="gridline" x1="@AxisWidth" x2="@(AxisWidth + PlotWidth)" y1="@InsightFormat.Svg(y)" y2="@InsightFormat.Svg(y)" />
+                <text x="@(AxisWidth - 6)" y="@InsightFormat.Svg(y + 4)" class="muted" text-anchor="end">@value.ToString("0.#")</text>
+            </g>
+        }
+
+        @for (var i = 0; i < Buckets.Count; i++)
+        {
+            var bucket = Buckets[i];
+            var x = AxisWidth + i * columnWidth + 1;
+            var w = Math.Max(1, columnWidth - 2);
+            var yCursor = (double)PlotBottom;
+            <g>
+                <title>@InsightFormat.Time(bucket.Start, includeDate)–@InsightFormat.Time(bucket.End, includeDate): @bucket.Completed klara, @bucket.Failed fel, @bucket.Running pågår</title>
+                <rect x="@InsightFormat.Svg(x)" y="@PlotTop" width="@InsightFormat.Svg(w)" height="@PlotHeight" fill="transparent" />
+                @foreach (var (count, css) in new[] { (bucket.Completed, "insight-ok"), (bucket.Failed, "insight-error"), (bucket.Running, "insight-running") })
+                {
+                    if (count == 0)
+                    {
+                        continue;
+                    }
+
+                    var h = count / scaleMax * PlotHeight;
+                    yCursor -= h;
+                    <rect class="@css mark" x="@InsightFormat.Svg(x)" y="@InsightFormat.Svg(yCursor)" width="@InsightFormat.Svg(w)" height="@InsightFormat.Svg(Math.Max(1, h - 2))" rx="2" />
+                }
+            </g>
+            @if (i % labelEvery == 0)
+            {
+                <g><text x="@InsightFormat.Svg(x)" y="@(PlotBottom + 16)" class="muted">@InsightFormat.Time(bucket.Start, includeDate)</text></g>
+            }
+        }
+        <line x1="@AxisWidth" x2="@(AxisWidth + PlotWidth)" y1="@PlotBottom" y2="@PlotBottom" stroke="var(--insight-muted)" />
+    </svg>
+    <div class="insight-legend mt-1">
+        <span><span class="insight-swatch insight-ok"></span>✅ Klar</span>
+        <span><span class="insight-swatch insight-error"></span>❌ Fel</span>
+        <span><span class="insight-swatch insight-running"></span>⏳ Pågår</span>
+        <span>Totalt: @Buckets.Sum(b => b.Completed) klara · @Buckets.Sum(b => b.Failed) fel · @Buckets.Sum(b => b.Running) pågår</span>
+    </div>
+}
+
+@code {
+    // Sized for a half-width card so labels render at roughly their nominal font size.
+    private const int Width = 540;
+    private const int Height = 220;
+    private const int AxisWidth = 32;
+    private const int PlotWidth = 500;
+    private const int PlotTop = 8;
+    private const int PlotBottom = 190;
+    private const int PlotHeight = PlotBottom - PlotTop;
+
+    /// <summary>Buckets ordered by time.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<FlowTrendBucket> Buckets { get; set; } = [];
+
+    /// <summary>Rounds the y-axis maximum up to a value that divides nicely into four gridlines.</summary>
+    /// <param name="max">Largest bucket total.</param>
+    /// <returns>A scale maximum of at least 4.</returns>
+    private static double NiceCeiling(int max) => Math.Max(4, Math.Ceiling(max / 4.0) * 4);
+}
