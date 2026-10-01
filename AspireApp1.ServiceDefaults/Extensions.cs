@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ServiceDiscovery;
 using System.Diagnostics;
 using System.Globalization;
+using Microsoft.Extensions.Configuration;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
@@ -82,7 +83,7 @@ public static class Extensions
             })
             .WithTracing(tracing =>
             {
-                tracing.SetSampler(new DiagnosticNoiseSampler(new ParentBasedSampler(new TraceIdRatioBasedSampler(samplingRatio))))
+                tracing.SetSampler(new DiagnosticNoiseSampler(CreateConfiguredSampler(builder.Configuration, samplingRatio)))
                     .AddSource(builder.Environment.ApplicationName)
                     .AddAspNetCoreInstrumentation(tracing =>
                         tracing.Filter = context => !TraceConventions.IsNoisePath(context.Request.Path.Value)
@@ -99,12 +100,44 @@ public static class Extensions
         return builder;
     }
 
+    private static Sampler CreateConfiguredSampler(IConfiguration configuration, double samplingRatio)
+    {
+        var samplerName = configuration["OTEL_TRACES_SAMPLER"];
+        if (string.IsNullOrWhiteSpace(samplerName))
+        {
+            return new ParentBasedSampler(new TraceIdRatioBasedSampler(samplingRatio));
+        }
+
+        var samplerArgument = ReadSamplerArgument(configuration);
+        return samplerName.Trim().ToLowerInvariant() switch
+        {
+            "always_on" => new AlwaysOnSampler(),
+            "always_off" => new AlwaysOffSampler(),
+            "traceidratio" => new TraceIdRatioBasedSampler(samplerArgument),
+            "parentbased_always_on" => new ParentBasedSampler(new AlwaysOnSampler()),
+            "parentbased_always_off" => new ParentBasedSampler(new AlwaysOffSampler()),
+            "parentbased_traceidratio" => new ParentBasedSampler(new TraceIdRatioBasedSampler(samplerArgument)),
+            _ => new ParentBasedSampler(new AlwaysOnSampler())
+        };
+    }
+
+    private static double ReadSamplerArgument(IConfiguration configuration)
+    {
+        var value = configuration["OTEL_TRACES_SAMPLER_ARG"];
+        return double.TryParse(value, NumberStyles.Float | NumberStyles.AllowThousands,
+                CultureInfo.InvariantCulture, out var ratio)
+            && !double.IsNaN(ratio)
+            && !double.IsInfinity(ratio)
+            && ratio is >= 0 and <= 1
+                ? ratio
+                : 1.0;
+    }
+
     private sealed class DiagnosticNoiseSampler(Sampler parentBased) : Sampler
     {
         public override SamplingResult ShouldSample(in SamplingParameters samplingParameters)
         {
             if (samplingParameters.Name.StartsWith("StatusMonitor.", StringComparison.Ordinal)
-                || samplingParameters.Name.StartsWith("Microsoft.AspNetCore.Components.Server.ComponentHub/", StringComparison.Ordinal)
                 || samplingParameters.Name.StartsWith("Route -> ", StringComparison.Ordinal))
             {
                 return new SamplingResult(SamplingDecision.Drop);
