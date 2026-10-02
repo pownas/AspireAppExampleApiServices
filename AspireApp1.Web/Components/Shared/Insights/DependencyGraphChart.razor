@@ -1,0 +1,123 @@
+@using AspireApp1.Web.Insights
+@* Service dependency graph from spans and flow-step handoffs: callers left, callees right. *@
+
+@if (Graph.Nodes.Count == 0)
+{
+    <p class="insight-empty">Ingen trafik i perioden – kör ett flöde för att se vilka tjänster som anropar varandra.</p>
+}
+else
+{
+    var layout = Graph.Nodes.ToDictionary(n => n.ServiceName, n => (X: Margin + n.Layer * ColumnSpacing, Y: Margin + n.Row * RowSpacing), StringComparer.OrdinalIgnoreCase);
+    var width = Margin * 2 + Graph.Nodes.Max(n => n.Layer) * ColumnSpacing + NodeWidth;
+    var height = Margin * 2 + Graph.Nodes.Max(n => n.Row) * RowSpacing + NodeHeight + 40;
+    var maxCalls = Math.Max(1, Graph.Edges.Select(e => e.Calls).DefaultIfEmpty(1).Max());
+
+    <svg class="insight-svg" viewBox="0 0 @width @height" style="max-width:@(width)px" role="img" aria-label="Beroendediagram mellan tjänster">
+        <defs>
+            <marker id="dep-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--insight-muted)" />
+            </marker>
+        </defs>
+
+        @foreach (var edge in Graph.Edges)
+        {
+            if (!layout.TryGetValue(edge.From, out var from) || !layout.TryGetValue(edge.To, out var to))
+            {
+                continue;
+            }
+
+            var status = EdgeStatus(edge);
+            var strokeWidth = 1.5 + 3.5 * edge.Calls / maxCalls;
+            var (path, labelX, labelY) = EdgePath(from.X, from.Y, to.X, to.Y);
+            <g>
+                <title>@edge.From → @edge.To: @edge.Calls anrop/överlämningar, @edge.Errors fel (@InsightFormat.Percent(edge.ErrorRate)), snitt @InsightFormat.Duration(edge.AverageMs)</title>
+                <path d="@path" fill="none" stroke="transparent" stroke-width="14" />
+                <path d="@path" fill="none" stroke="@EdgeColor(status)" stroke-width="@InsightFormat.Svg(strokeWidth)" marker-end="url(#dep-arrow)" stroke-linecap="round" />
+                <text x="@InsightFormat.Svg(labelX)" y="@InsightFormat.Svg(labelY)" class="muted" text-anchor="middle"
+                      paint-order="stroke" stroke="var(--bs-body-bg)" stroke-width="4">@edge.Calls× @(edge.Errors > 0 ? $"· {InsightFormat.Percent(edge.ErrorRate)} fel" : "") · @InsightFormat.Duration(edge.AverageMs)</text>
+            </g>
+        }
+
+        @foreach (var node in Graph.Nodes)
+        {
+            var (x, y) = layout[node.ServiceName];
+            var status = NodeStatus(node);
+            <g>
+                <title>@node.ServiceName: @node.ActivityCount aktiviteter, @node.ErrorCount fel (@InsightFormat.Percent(node.ErrorRate))</title>
+                <rect x="@x" y="@y" width="@NodeWidth" height="@NodeHeight" rx="6" fill="var(--bs-body-bg)" stroke="@EdgeColor(status)" stroke-width="2" />
+                <rect class="@InsightFormat.StatusClass(status)" x="@x" y="@y" width="6" height="@NodeHeight" rx="3" />
+                <text x="@(x + 14)" y="@(y + 19)" font-weight="600">@Truncate(DisplayName(node.ServiceName), 22)</text>
+                <text x="@(x + 14)" y="@(y + 36)" class="muted">@node.ActivityCount aktiviteter · @InsightFormat.StatusLabel(status)</text>
+            </g>
+        }
+    </svg>
+    <div class="insight-legend mt-1">
+        <span>Pil = anrop eller överlämning mellan flödessteg (tjockare = fler)</span>
+        <span><span class="insight-swatch" style="background:var(--insight-muted)"></span>Inga fel</span>
+        <span><span class="insight-swatch insight-warning"></span>⚠️ &lt; 20 % fel</span>
+        <span><span class="insight-swatch insight-error"></span>❌ ≥ 20 % fel</span>
+    </div>
+}
+
+@code {
+    private const int Margin = 16;
+    private const int NodeWidth = 190;
+    private const int NodeHeight = 46;
+    private const int ColumnSpacing = 280;
+    private const int RowSpacing = 78;
+
+    /// <summary>The graph to draw.</summary>
+    [Parameter, EditorRequired]
+    public DependencyGraphModel Graph { get; set; } = new();
+
+    /// <summary>Maps an error rate to a status: none, some (&lt; 20 %) or many.</summary>
+    /// <param name="errorRate">Share of failed calls, 0-1.</param>
+    /// <returns>The status used for colour and label.</returns>
+    private static InsightStatus RateStatus(double errorRate) =>
+        errorRate <= 0 ? InsightStatus.Ok : errorRate < 0.2 ? InsightStatus.Warning : InsightStatus.Error;
+
+    private static InsightStatus EdgeStatus(DependencyEdge edge) => RateStatus(edge.ErrorRate);
+
+    private static InsightStatus NodeStatus(DependencyNode node) => RateStatus(node.ErrorRate);
+
+    private static string EdgeColor(InsightStatus status) => status switch
+    {
+        InsightStatus.Warning => "var(--insight-warning)",
+        InsightStatus.Error => "var(--insight-error)",
+        _ => "var(--insight-muted)"
+    };
+
+    /// <summary>
+    /// Builds an SVG path between two nodes plus a label position.
+    /// Forward edges are S-curves; edges to the same or an earlier column arc below the nodes.
+    /// </summary>
+    /// <returns>Path data and label coordinates.</returns>
+    private static (string Path, double LabelX, double LabelY) EdgePath(double fromX, double fromY, double toX, double toY)
+    {
+        var sy = fromY + NodeHeight / 2.0;
+        var ty = toY + NodeHeight / 2.0;
+
+        if (toX > fromX)
+        {
+            var sx = fromX + NodeWidth;
+            var tx = toX - 2;
+            var mid = (sx + tx) / 2;
+            return ($"M {InsightFormat.Svg(sx)} {InsightFormat.Svg(sy)} C {InsightFormat.Svg(mid)} {InsightFormat.Svg(sy)}, {InsightFormat.Svg(mid)} {InsightFormat.Svg(ty)}, {InsightFormat.Svg(tx)} {InsightFormat.Svg(ty)}",
+                mid, Math.Min(sy, ty) - 8);
+        }
+
+        var bottom = Math.Max(fromY, toY) + NodeHeight + 30;
+        var startX = fromX + NodeWidth / 2.0;
+        var endX = toX + NodeWidth / 2.0 + 12;
+        return ($"M {InsightFormat.Svg(startX)} {InsightFormat.Svg(fromY + NodeHeight)} C {InsightFormat.Svg(startX)} {InsightFormat.Svg(bottom)}, {InsightFormat.Svg(endX)} {InsightFormat.Svg(bottom)}, {InsightFormat.Svg(endX)} {InsightFormat.Svg(toY + NodeHeight + 2)}",
+            (startX + endX) / 2, bottom - 4);
+    }
+
+    /// <summary>Drops the shared "AspireApp1." prefix so node labels fit.</summary>
+    /// <param name="serviceName">Full service name.</param>
+    /// <returns>Short display name.</returns>
+    private static string DisplayName(string serviceName) =>
+        serviceName.StartsWith("AspireApp1.", StringComparison.OrdinalIgnoreCase) ? serviceName["AspireApp1.".Length..] : serviceName;
+
+    private static string Truncate(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
+}

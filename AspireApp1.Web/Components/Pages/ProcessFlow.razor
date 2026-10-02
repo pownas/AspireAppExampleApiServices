@@ -919,18 +919,32 @@ else if (currentTrace is not null)
             totalMs = 1;
         }
         var totalSeconds = totalMs / 1000d;
+        var ganttRows = GanttLayoutCalculator.BuildRows(spans);
+        var ticks = GanttLayoutCalculator.BuildTicks(totalMs);
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
 
+        <div class="d-flex flex-wrap gap-3 align-items-center small text-muted mb-2">
+            <span>Tidslinje: @totalSeconds.ToString("F2") sek totalt</span>
+            <span><span class="gantt-legend-critical"></span> Kritisk väg (bestämmer total tid)</span>
+            <span>Indrag = anrop från föregående span</span>
+        </div>
         <div class="gantt-container" style="overflow-x: auto;">
-            <table class="table table-sm table-bordered mb-0">
+            <table class="table table-sm table-bordered mb-0 gantt-table">
                 <thead>
                     <tr>
-                        <th style="min-width:200px;">Tjänst / Operation</th>
-                        <th>Tidslinje (@totalSeconds.ToString("F2") sek totalt)</th>
+                        <th style="min-width:220px;">Tjänst / Operation</th>
+                        <th class="gantt-axis-cell">
+                            @foreach (var tick in ticks)
+                            {
+                                <span class="gantt-tick-label" style="left:@(tick.OffsetPercent.ToString("F2", inv))%;">@tick.Label</span>
+                            }
+                        </th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var span in spans)
+                    @foreach (var row in ganttRows)
                     {
+                        var span = row.Span;
                         var offsetPct = totalMs > 0 ? (span.StartTime - traceStart).TotalMilliseconds / totalMs * 100 : 0;
                         var widthPct = span.Duration.HasValue && totalMs > 0
                             ? Math.Max(0.5, span.Duration.Value.TotalMilliseconds / totalMs * 100)
@@ -944,16 +958,29 @@ else if (currentTrace is not null)
                             _ => "bg-secondary"
                         };
                         var isHighlighted = highlightedSpanIds.Contains(span.SpanId.ToLowerInvariant());
+                        var durationText = span.Duration.HasValue ? GanttLayoutCalculator.FormatMs(span.Duration.Value.TotalMilliseconds) : "okänd varaktighet";
 
                         <tr class="@GetGanttRowClass(span, isHighlighted)" @onclick="() => ToggleSpanDetails(span)" style="cursor:pointer;" title="@span.OperationName">
                             <td class="small">
-                                <span>@GetStatusEmoji(span.Status)</span>
-                                <strong>@span.ServiceName</strong><br />
-                                <span class="text-muted">@span.OperationName</span>
+                                <div style="padding-left:@(row.Depth * 14)px;" class="@(row.Depth > 0 ? "gantt-child" : null)">
+                                    <span>@GetStatusEmoji(span.Status)</span>
+                                    <strong>@span.ServiceName</strong>
+                                    @if (row.IsOnCriticalPath)
+                                    {
+                                        <span class="badge text-bg-dark ms-1" title="Del av den kritiska vägen">kritisk</span>
+                                    }
+                                    <br />
+                                    <span class="text-muted">@span.OperationName</span>
+                                </div>
                             </td>
-                            <td style="position:relative; min-width:300px; height:2.5rem; padding:0;">
-                                <div style="position:absolute; left:@(offsetPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; width:@(widthPct.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))%; top:25%; height:50%; border-radius:3px;"
-                                     class="@barClass" title="@(span.Duration.HasValue ? $"{span.Duration.Value.TotalSeconds:F2} sek" : "okänd varaktighet")">
+                            <td class="gantt-bar-cell">
+                                @foreach (var tick in ticks)
+                                {
+                                    <div class="gantt-gridline" style="left:@(tick.OffsetPercent.ToString("F2", inv))%;"></div>
+                                }
+                                <div style="left:@(offsetPct.ToString("F2", inv))%; width:@(widthPct.ToString("F2", inv))%;"
+                                     class="gantt-bar @barClass @(row.IsOnCriticalPath ? "gantt-bar-critical" : null)"
+                                     title="@span.ServiceName · @span.OperationName · @durationText">
                                 </div>
                             </td>
                         </tr>

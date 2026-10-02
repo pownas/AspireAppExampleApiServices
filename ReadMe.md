@@ -162,6 +162,21 @@ Startsidan i frontend visar nu aktiv provider under rubriken **Aktiv StateStore 
 
 Sidan `/flowruns` visar alla senaste flödeskörningar och länkar vidare till `/processflow`.
 
+## Insikter (`/insights`)
+
+Sidan **Insikter** visar trender och mönster över många körningar i ett valbart tidsfönster (1 h, 6 h, 24 h, 7 d) och uppdateras var 10:e sekund:
+
+- **Var fastnar flödena?** – vilket steg/tjänst misslyckade körningar stannade på
+- **Flödeskörningar över tid** – klara / fel / pågår per intervall
+- **Tjänstehälsa över tid** – status per tjänst och upptid, från WorkerService4:s hälsokontroller
+- **Beroendediagram** – byggs från verklig trafik (spans och flödesstegens överlämningar)
+- **Svarstider** – P50/P95/max och HTTP-fel per tjänst, samt de långsammaste operationerna
+- **Återförsök per steg**, **jobbkö** och **kedjekörningar**
+
+Tidslinjevyn i `/processflow` har tidsaxel, indrag efter förälder–barn och markerar den **kritiska vägen**.
+
+![Insikter](docs/screenshots/insights.png)
+
 ## Retry- och Intermittent-demo med konfigurerbar simulering
 
 Formulären på `/retrydemo` och `/intermittentdemo` hämtar default-profiler från WorkerService1 (`GET /flow/simulation/profiles`) och skickar valda värden vid start av flöde.

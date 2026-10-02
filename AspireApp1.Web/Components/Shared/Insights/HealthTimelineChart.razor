@@ -1,0 +1,63 @@
+@using AspireApp1.Web.Insights
+@* Status timeline: one row per service, one cell per time bucket (worst status in the bucket). *@
+
+@if (Rows.Count == 0)
+{
+    <p class="insight-empty">Inga hälsokontroller i perioden. WorkerService4 skriver dem när den körs.</p>
+}
+else
+{
+    var cellCount = Rows[0].Cells.Count;
+    var cellWidth = (double)CellArea / cellCount;
+    var height = Rows.Count * RowHeight + 22;
+    var includeDate = (To - From) > TimeSpan.FromHours(24);
+
+    <svg class="insight-svg" viewBox="0 0 @Width @height" role="img" aria-label="Hälsostatus per tjänst över tid">
+        @for (var r = 0; r < Rows.Count; r++)
+        {
+            var row = Rows[r];
+            var y = r * RowHeight;
+            <g>
+            <text x="0" y="@(y + 15)">@row.ServiceName</text>
+            @for (var c = 0; c < row.Cells.Count; c++)
+            {
+                var cell = row.Cells[c];
+                <rect class="@InsightFormat.StatusClass(cell.Status) mark"
+                      x="@InsightFormat.Svg(LabelArea + c * cellWidth)" y="@(y + 3)"
+                      width="@InsightFormat.Svg(Math.Max(1, cellWidth - 2))" height="16" rx="2">
+                    <title>@row.ServiceName · @InsightFormat.Time(cell.Start, includeDate)–@InsightFormat.Time(cell.End, includeDate) · @InsightFormat.StatusLabel(cell.Status)@(cell.Checks > 0 ? $" · {cell.Failures} av {cell.Checks} kontroller misslyckades" : "")</title>
+                </rect>
+            }
+            <text x="@(LabelArea + CellArea + 10)" y="@(y + 15)">@(row.UptimePercent is { } up ? $"{up:0.#} %" : "–")</text>
+            </g>
+        }
+        <text x="@LabelArea" y="@(height - 4)" class="muted">@InsightFormat.Time(From, includeDate)</text>
+        <text x="@(LabelArea + CellArea)" y="@(height - 4)" class="muted" text-anchor="end">@InsightFormat.Time(To, includeDate)</text>
+        <text x="@(LabelArea + CellArea + 10)" y="@(height - 4)" class="muted">upptid</text>
+    </svg>
+    <div class="insight-legend mt-1">
+        <span><span class="insight-swatch insight-ok"></span>✅ OK</span>
+        <span><span class="insight-swatch insight-warning"></span>⚠️ Varning</span>
+        <span><span class="insight-swatch insight-error"></span>❌ Fel / ej nåbar</span>
+        <span><span class="insight-swatch insight-nodata"></span>Ingen kontroll</span>
+    </div>
+}
+
+@code {
+    private const int Width = 760;
+    private const int LabelArea = 170;
+    private const int CellArea = 520;
+    private const int RowHeight = 24;
+
+    /// <summary>One row per service.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<HealthTimelineRow> Rows { get; set; } = [];
+
+    /// <summary>Window start (left axis label).</summary>
+    [Parameter]
+    public DateTimeOffset From { get; set; }
+
+    /// <summary>Window end (right axis label).</summary>
+    [Parameter]
+    public DateTimeOffset To { get; set; }
+}
