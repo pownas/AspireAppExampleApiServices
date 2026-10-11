@@ -86,8 +86,11 @@ public static class Extensions
                 tracing.SetSampler(new DiagnosticNoiseSampler(CreateConfiguredSampler(builder.Configuration, samplingRatio)))
                     .AddSource(builder.Environment.ApplicationName)
                     .AddAspNetCoreInstrumentation(tracing =>
-                        tracing.Filter = context => !TraceConventions.IsNoisePath(context.Request.Path.Value)
-                    )
+                    {
+                        tracing.Filter = context => !TraceConventions.IsNoisePath(context.Request.Path.Value);
+                        tracing.EnableAspNetCoreSignalRSupport =
+                            builder.Environment.ApplicationName != "AspireApp1.Web";
+                    })
                     // Uncomment the following line to enable gRPC instrumentation (requires the OpenTelemetry.Instrumentation.GrpcNetClient package)
                     //.AddGrpcClientInstrumentation()
                     .AddHttpClientInstrumentation(tracing =>

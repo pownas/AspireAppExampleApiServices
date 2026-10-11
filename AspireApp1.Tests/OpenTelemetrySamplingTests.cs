@@ -36,7 +36,7 @@ public class OpenTelemetrySamplingTests
     }
 
     [TestMethod]
-    public void ConfigureOpenTelemetry_PreservesSampledBlazorParent()
+    public void ConfigureOpenTelemetry_PreservesSampledParentForBlazorChild()
     {
         var sampledParent = new ActivityContext(
             ActivityTraceId.CreateRandom(),
@@ -47,15 +47,42 @@ public class OpenTelemetrySamplingTests
         var isRecorded = IsRecorded(new Dictionary<string, string?>
         {
             ["OTEL_TRACES_SAMPLER"] = "parentbased_always_off"
-        }, sampledParent, "Microsoft.AspNetCore.Components.Server.ComponentHub/test");
+        }, sampledParent, "Blazor.Child");
 
         Assert.IsTrue(isRecorded);
+    }
+
+    [TestMethod]
+    public void ConfigureOpenTelemetry_WebHostDoesNotSubscribeToSignalRHubActivities()
+    {
+        var isRecorded = TryRecordActivity(
+            new Dictionary<string, string?>
+            {
+                ["OTEL_TRACES_SAMPLER"] = "always_on"
+            },
+            "Microsoft.AspNetCore.Components.Server.ComponentHub/StartCircuit",
+            "AspireApp1.Web",
+            "Microsoft.AspNetCore.SignalR.Server");
+
+        Assert.IsNull(isRecorded, "The Blazor web host should not listen to SignalR hub activities.");
     }
 
     private static bool IsRecorded(
         IDictionary<string, string?> configuration,
         ActivityContext parentContext = default,
         string activityName = "sampling-test")
+    {
+        var isRecorded = TryRecordActivity(configuration, activityName, ActivitySourceName, ActivitySourceName, parentContext);
+        Assert.IsNotNull(isRecorded, "The test ActivitySource should be subscribed by the tracer provider.");
+        return isRecorded.Value;
+    }
+
+    private static bool? TryRecordActivity(
+        IDictionary<string, string?> configuration,
+        string activityName,
+        string applicationName,
+        string activitySourceName,
+        ActivityContext parentContext = default)
     {
         var environmentVariables = new Dictionary<string, string?>
         {
@@ -73,18 +100,17 @@ public class OpenTelemetrySamplingTests
             {
                 Environment.SetEnvironmentVariable(key, value);
             }
-
             var builder = new HostApplicationBuilder();
-            builder.Environment.ApplicationName = ActivitySourceName;
+            var builder = new HostApplicationBuilder();
             builder.ConfigureOpenTelemetry();
-
+            builder.ConfigureOpenTelemetry();
             using var services = builder.Services.BuildServiceProvider();
             using var tracerProvider = services.GetRequiredService<TracerProvider>();
-            using var source = new ActivitySource(ActivitySourceName);
+            using var tracerProvider = services.GetRequiredService<TracerProvider>();
+            using var activity = source.StartActivity(activityName, ActivityKind.Internal, parentContext);
             using var activity = source.StartActivity(activityName, ActivityKind.Internal, parentContext);
 
-            Assert.IsNotNull(activity, "The test ActivitySource should be subscribed by the tracer provider.");
-            return activity.Recorded;
+            return activity?.Recorded;
         }
         finally
         {
