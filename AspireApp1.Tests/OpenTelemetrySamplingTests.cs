@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using OpenTelemetry.Trace;
 
@@ -84,43 +85,15 @@ public class OpenTelemetrySamplingTests
         string activitySourceName,
         ActivityContext parentContext = default)
     {
-        var environmentVariables = new Dictionary<string, string?>
-        {
-            ["Tracing__SamplingRatio"] = GetValue(configuration, "Tracing:SamplingRatio"),
-            ["OTEL_TRACES_SAMPLER"] = GetValue(configuration, "OTEL_TRACES_SAMPLER"),
-            ["OTEL_TRACES_SAMPLER_ARG"] = GetValue(configuration, "OTEL_TRACES_SAMPLER_ARG")
-        };
-        var previousValues = environmentVariables.Keys.ToDictionary(
-            key => key,
-            Environment.GetEnvironmentVariable);
+        var builder = new HostApplicationBuilder();
+        builder.Environment.ApplicationName = applicationName;
+        builder.Configuration.AddInMemoryCollection(configuration);
+        builder.ConfigureOpenTelemetry();
+        using var services = builder.Services.BuildServiceProvider();
+        using var tracerProvider = services.GetRequiredService<TracerProvider>();
+        using var source = new ActivitySource(activitySourceName);
+        using var activity = source.StartActivity(activityName, ActivityKind.Internal, parentContext);
 
-        try
-        {
-            foreach (var (key, value) in environmentVariables)
-            {
-                Environment.SetEnvironmentVariable(key, value);
-            }
-            var builder = new HostApplicationBuilder();
-            var builder = new HostApplicationBuilder();
-            builder.ConfigureOpenTelemetry();
-            builder.ConfigureOpenTelemetry();
-            using var services = builder.Services.BuildServiceProvider();
-            using var tracerProvider = services.GetRequiredService<TracerProvider>();
-            using var tracerProvider = services.GetRequiredService<TracerProvider>();
-            using var activity = source.StartActivity(activityName, ActivityKind.Internal, parentContext);
-            using var activity = source.StartActivity(activityName, ActivityKind.Internal, parentContext);
-
-            return activity?.Recorded;
-        }
-        finally
-        {
-            foreach (var (key, value) in previousValues)
-            {
-                Environment.SetEnvironmentVariable(key, value);
-            }
-        }
+        return activity?.Recorded;
     }
-
-    private static string? GetValue(IDictionary<string, string?> configuration, string key) =>
-        configuration.TryGetValue(key, out var value) ? value : null;
 }
