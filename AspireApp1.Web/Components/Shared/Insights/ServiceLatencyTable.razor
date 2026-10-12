@@ -1,0 +1,65 @@
+@using AspireApp1.Web.Insights
+@* Table with inline bars: P50/P95/max duration, error rate and HTTP error codes per service. *@
+
+@if (Items.Count == 0)
+{
+    <p class="insight-empty">Inga avslutade spans i perioden.</p>
+}
+else
+{
+    var maxP95 = Math.Max(1, Items.Max(i => i.P95Ms));
+    <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Tjänst</th>
+                    <th class="text-end">Spans</th>
+                    <th class="text-end">P50</th>
+                    <th style="min-width:180px">P95</th>
+                    <th class="text-end">Max</th>
+                    <th class="text-end">Fel</th>
+                    <th>HTTP-fel</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Items)
+                {
+                    <tr>
+                        <td>@item.ServiceName</td>
+                        <td class="text-end">@item.SpanCount</td>
+                        <td class="text-end text-nowrap">@InsightFormat.Duration(item.P50Ms)</td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2" title="P95 @InsightFormat.Duration(item.P95Ms)">
+                                <div class="insight-minibar" style="width:@InsightFormat.Svg(Math.Max(2, item.P95Ms / maxP95 * 120))px"></div>
+                                <span class="small text-nowrap">@InsightFormat.Duration(item.P95Ms)</span>
+                            </div>
+                        </td>
+                        <td class="text-end text-nowrap">@InsightFormat.Duration(item.MaxMs)</td>
+                        <td class="text-end">
+                            @if (item.ErrorCount > 0)
+                            {
+                                <span>❌ @item.ErrorCount (@InsightFormat.Percent(item.ErrorRate))</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">0</span>
+                            }
+                        </td>
+                        <td>
+                            @foreach (var (statusCode, count) in item.StatusCodes)
+                            {
+                                <span class="badge @(statusCode >= 500 ? "text-bg-danger" : "text-bg-warning") me-1">@statusCode × @count</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    /// <summary>Per-service latency rows, slowest first.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ServiceLatency> Items { get; set; } = [];
+}

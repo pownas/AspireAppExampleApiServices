@@ -68,7 +68,7 @@
 <div class="card mb-4">
     <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
         <span>Tjänstarkitektur &amp; tjänstehälsa</span>
-        <small class="text-muted">@($"Hälsa auto-uppdateras var {AutoRefreshSettings.IntervalSeconds}:e sekund")</small>
+        <small class="text-muted">@($"Hälsa auto-uppdateras var {AutoRefreshSettings.IntervalSeconds}:e sekund") · <a href="/insights">Levande beroendediagram och hälsohistorik →</a></small>
     </div>
     <div class="card-body">
         <div class="d-flex flex-wrap gap-2 align-items-center justify-content-center">
@@ -157,7 +157,8 @@
                 </div>
             </div>
             <div class="text-center mt-3">
-                <a href="/processflow" class="btn btn-outline-primary btn-sm">Utforska ett flöde i Processflöde →</a>
+                <a href="/processflow" class="btn btn-outline-primary btn-sm me-1">Utforska ett flöde i Processflöde →</a>
+                <a href="/insights" class="btn btn-outline-secondary btn-sm">📊 Trender och insikter →</a>
             </div>
         }
         else

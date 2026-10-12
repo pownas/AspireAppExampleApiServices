@@ -61,3 +61,68 @@
     max-height: 26rem;
     opacity: 1;
 }
+
+/* Timeline (Gantt) view */
+.gantt-axis-cell {
+    position: relative;
+    min-width: 320px;
+    height: 2rem;
+    padding: 0 !important;
+    font-weight: normal;
+}
+
+.gantt-tick-label {
+    position: absolute;
+    bottom: 0.2rem;
+    transform: translateX(-50%);
+    font-size: 0.7rem;
+    color: var(--bs-secondary-color);
+    white-space: nowrap;
+}
+
+.gantt-tick-label:first-child {
+    transform: none;
+}
+
+.gantt-bar-cell {
+    position: relative;
+    min-width: 320px;
+    height: 2.5rem;
+    padding: 0 !important;
+}
+
+.gantt-gridline {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: var(--bs-border-color-translucent);
+}
+
+.gantt-bar {
+    position: absolute;
+    top: 25%;
+    height: 50%;
+    border-radius: 3px;
+}
+
+.gantt-bar-critical {
+    outline: 2px solid var(--bs-emphasis-color);
+    outline-offset: 1px;
+}
+
+.gantt-legend-critical {
+    display: inline-block;
+    width: 1.4rem;
+    height: 0.6rem;
+    border-radius: 2px;
+    background-color: var(--bs-success);
+    outline: 2px solid var(--bs-emphasis-color);
+    outline-offset: 1px;
+    vertical-align: middle;
+    margin-right: 0.25rem;
+}
+
+.gantt-child {
+    border-left: 2px solid var(--bs-border-color);
+}

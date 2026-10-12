@@ -33,6 +33,10 @@ builder.Services.AddConfiguredStateStoreDbContextFactory(builder.Configuration);
 builder.Services.AddScoped<TraceQueryService>();
 builder.Services.AddScoped<FlowRestartService>();
 
+// InsightsQueryService aggregates recent state-store data for the /insights page.
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<AspireApp1.Web.Insights.InsightsQueryService>();
+
 var app = builder.Build();
 
 await using (var scope = app.Services.CreateAsyncScope())

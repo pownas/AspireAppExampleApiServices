@@ -1,0 +1,48 @@
+@using AspireApp1.Web.Insights
+@* Horizontal bar chart: where failed flow runs stopped (step + service), most frequent first. *@
+
+@if (Items.Count == 0)
+{
+    <p class="insight-empty">✅ Inga misslyckade steg i perioden.</p>
+}
+else
+{
+    var max = Math.Max(1, Items.Max(i => i.FailedCount));
+    var height = Items.Count * RowHeight + 8;
+
+    <svg class="insight-svg" viewBox="0 0 @Width @height" role="img"
+         aria-label="Antal misslyckade körningar per steg och tjänst">
+        @for (var i = 0; i < Items.Count; i++)
+        {
+            var item = Items[i];
+            var y = i * RowHeight + 4;
+            var barWidth = Math.Max(3, (double)item.FailedCount / max * BarArea);
+            <g>
+                <title>@item.StepName (@item.ServiceName): @item.FailedCount misslyckade@(item.LastError is null ? "" : $" – senaste fel: {item.LastError}")</title>
+                <rect x="0" y="@y" width="@Width" height="@(RowHeight - 2)" fill="transparent" />
+                <text x="0" y="@InsightFormat.Svg(y + 11)">@Truncate(item.StepName, 30)</text>
+                <text x="0" y="@InsightFormat.Svg(y + 23)" class="muted">@Truncate(item.ServiceName, 32)</text>
+                <rect class="insight-error mark" x="@LabelArea" y="@InsightFormat.Svg(y + 5)" width="@InsightFormat.Svg(barWidth)" height="14" rx="3" />
+                <text x="@InsightFormat.Svg(LabelArea + barWidth + 6)" y="@InsightFormat.Svg(y + 17)">@item.FailedCount</text>
+            </g>
+        }
+    </svg>
+}
+
+@code {
+    // Sized for a half-width card so labels render at roughly their nominal font size.
+    private const int Width = 540;
+    private const int LabelArea = 220;
+    private const int BarArea = 280;
+    private const int RowHeight = 32;
+
+    /// <summary>Hotspots to draw, already sorted.</summary>
+    [Parameter, EditorRequired]
+    public IReadOnlyList<FailureHotspot> Items { get; set; } = [];
+
+    /// <summary>Shortens long labels so they do not overlap the bars.</summary>
+    /// <param name="text">Label text.</param>
+    /// <param name="max">Maximum characters.</param>
+    /// <returns>The text, possibly cut with an ellipsis.</returns>
+    private static string Truncate(string text, int max) => text.Length <= max ? text : text[..(max - 1)] + "…";
+}

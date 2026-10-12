@@ -1,0 +1,348 @@
+@page "/insights"
+@rendermode InteractiveServer
+@implements IDisposable
+@using AspireApp1.Web.Insights
+@using AspireApp1.Web.Components.Shared.Insights
+@inject InsightsQueryService InsightsQuery
+@inject ILogger<Insights> Logger
+
+<PageTitle>Insikter</PageTitle>
+
+<h1>Insikter</h1>
+<p class="lead text-muted">Trender och mönster över många körningar – var flöden fastnar, hur tjänsterna mår över tid och vem som anropar vem.</p>
+
+<div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+    <div class="btn-group" role="group" aria-label="Tidsfönster">
+        @foreach (var option in WindowOptions)
+        {
+            <button type="button" class="btn btn-sm @(option.Window == _window ? "btn-primary" : "btn-outline-primary")"
+                    @onclick="() => SelectWindowAsync(option.Window)">@option.Label</button>
+        }
+    </div>
+    <span class="text-muted small">
+        @if (_snapshot is not null)
+        {
+            <text>@InsightFormat.Time(_snapshot.From, true) – @InsightFormat.Time(_snapshot.To, true) · uppdateras var 10:e sekund</text>
+        }
+    </span>
+    @if (_isLoading)
+    {
+        <span class="spinner-border spinner-border-sm text-primary" role="status" aria-label="Laddar"></span>
+    }
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-warning">Kunde inte läsa insikter: @_error</div>
+}
+
+@if (_snapshot is null)
+{
+    <p class="text-muted">Laddar…</p>
+}
+else
+{
+    var runs = _snapshot.FlowTrend.Sum(b => b.Total);
+    var failed = _snapshot.FlowTrend.Sum(b => b.Failed);
+    var unhealthyNow = _snapshot.HealthTimeline.Count(r => r.CurrentStatus is InsightStatus.Error or InsightStatus.Warning);
+    var slowest = _snapshot.ServiceLatencies.FirstOrDefault();
+
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-lg-3">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Flödeskörningar</div>
+                <div class="fs-3 fw-semibold">@runs</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Andel misslyckade</div>
+                <div class="fs-3 fw-semibold">@(runs == 0 ? "–" : InsightFormat.Percent((double)failed / runs))</div>
+                <div class="small text-muted">@failed av @runs</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Tjänster med problem just nu</div>
+                <div class="fs-3 fw-semibold">@(unhealthyNow == 0 ? "✅ 0" : $"⚠️ {unhealthyNow}")</div>
+                <div class="small text-muted">av @_snapshot.HealthTimeline.Count övervakade</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card h-100"><div class="card-body">
+                <div class="text-muted small">Högst P95-svarstid</div>
+                <div class="fs-3 fw-semibold">@(slowest is null ? "–" : InsightFormat.Duration(slowest.P95Ms))</div>
+                <div class="small text-muted text-truncate">@(slowest?.ServiceName ?? "ingen data")</div>
+            </div></div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-xl-6">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Var fastnar flödena?</div>
+                <div class="card-body">
+                    <p class="small text-muted">Steg där körningar misslyckades, flest först. Håll muspekaren över en stapel för senaste felet.</p>
+                    <FailureHotspotChart Items="_snapshot.FailureHotspots" />
+                    @if (_snapshot.FailureHotspots.FirstOrDefault(h => h.LastTraceId is not null) is { } top)
+                    {
+                        <a class="btn btn-outline-danger btn-sm mt-2" href="/processflow?traceId=@Uri.EscapeDataString(top.LastTraceId!)">Öppna senaste felet i Processflöde</a>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Flödeskörningar över tid</div>
+                <div class="card-body">
+                    <FlowTrendChart Buckets="_snapshot.FlowTrend" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">Tjänstehälsa över tid</div>
+        <div class="card-body">
+            <p class="small text-muted">Varje ruta visar sämsta status under intervallet, enligt WorkerService4:s /health-kontroller.</p>
+            <HealthTimelineChart Rows="_snapshot.HealthTimeline" From="_snapshot.From" To="_snapshot.To" />
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">Beroendediagram (från verklig trafik)</div>
+        <div class="card-body">
+            <p class="small text-muted">Byggs från verklig data: spans (en tjänst anropar en annan i samma trace) och flödessteg (steg n i en tjänst följs av steg n+1 i nästa). Etiketten visar antal, felandel och snittid.</p>
+            <DependencyGraphChart Graph="_snapshot.DependencyGraph" />
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-12">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Svarstider per tjänst</div>
+                <div class="card-body">
+                    <ServiceLatencyTable Items="_snapshot.ServiceLatencies" />
+                </div>
+            </div>
+        </div>
+        <div class="col-12">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Långsammaste operationerna</div>
+                <div class="card-body">
+                    @if (_snapshot.SlowestOperations.Count == 0)
+                    {
+                        <p class="insight-empty">Inga avslutade spans i perioden.</p>
+                    }
+                    else
+                    {
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Operation</th><th class="text-end">Tid</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var op in _snapshot.SlowestOperations)
+                                {
+                                    <tr>
+                                        <td><div class="fw-semibold small">@op.OperationName</div><div class="text-muted small">@op.ServiceName · @InsightFormat.Time(op.StartTime, true)</div></td>
+                                        <td class="text-end">@InsightFormat.Duration(op.DurationMs)</td>
+                                        <td class="text-end"><a class="btn btn-outline-primary btn-sm" href="/processflow?traceId=@Uri.EscapeDataString(op.TraceId)">Trace</a></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-xl-6">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Återförsök per steg</div>
+                <div class="card-body">
+                    @if (_snapshot.RetryStats.Count == 0)
+                    {
+                        <p class="insight-empty">Inga flödessteg i perioden.</p>
+                    }
+                    else
+                    {
+                        <table class="table table-sm align-middle mb-0">
+                            <thead><tr><th>Steg</th><th class="text-end">Körningar</th><th style="min-width:150px">Behövde retry</th><th class="text-end">Max försök</th><th class="text-end">Fel efter retry</th></tr></thead>
+                            <tbody>
+                                @foreach (var r in _snapshot.RetryStats)
+                                {
+                                    <tr>
+                                        <td><div class="small fw-semibold">@r.StepName</div><div class="small text-muted">@r.ServiceName</div></td>
+                                        <td class="text-end">@r.Executions</td>
+                                        <td>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="insight-minibar" style="width:@InsightFormat.Svg(Math.Max(2, r.RetryRate * 100))px"></div>
+                                                <span class="small text-nowrap">@InsightFormat.Percent(r.RetryRate)</span>
+                                            </div>
+                                        </td>
+                                        <td class="text-end">@r.MaxRetryAttempt</td>
+                                        <td class="text-end">@(r.FailedAfterRetries > 0 ? $"❌ {r.FailedAfterRetries}" : "0")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Jobbkö per tjänst</div>
+                <div class="card-body">
+                    @if (_snapshot.JobStatuses.Count == 0)
+                    {
+                        <p class="insight-empty">Inga jobb i perioden.</p>
+                    }
+                    else
+                    {
+                        <table class="table table-sm align-middle mb-2">
+                            <thead><tr><th>Tjänst</th><th style="min-width:180px">Fördelning</th><th class="text-end">⏸ Kö</th><th class="text-end">⏳ Körs</th><th class="text-end">✅ Klar</th><th class="text-end">❌ Fel</th></tr></thead>
+                            <tbody>
+                                @foreach (var j in _snapshot.JobStatuses)
+                                {
+                                    <tr>
+                                        <td class="small">@j.ServiceName</td>
+                                        <td>
+                                            <div class="d-flex" style="height:0.7rem; gap:2px;" title="@j.Queued i kö, @j.Processing körs, @j.Completed klara, @j.Failed fel">
+                                                @foreach (var (count, css) in new[] { (j.Completed, "insight-ok"), (j.Processing, "insight-running"), (j.Queued, "insight-nodata"), (j.Failed, "insight-error") })
+                                                {
+                                                    if (count > 0)
+                                                    {
+                                                        <div class="@css" style="flex:@count; border-radius:2px;"></div>
+                                                    }
+                                                }
+                                            </div>
+                                        </td>
+                                        <td class="text-end">@j.Queued</td>
+                                        <td class="text-end">@j.Processing</td>
+                                        <td class="text-end">@j.Completed</td>
+                                        <td class="text-end">@j.Failed</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                        <div class="insight-legend">
+                            <span><span class="insight-swatch insight-ok"></span>Klar</span>
+                            <span><span class="insight-swatch insight-running"></span>Körs</span>
+                            <span><span class="insight-swatch insight-nodata"></span>I kö</span>
+                            <span><span class="insight-swatch insight-error"></span>Fel</span>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">Kedjekörningar (ChainRuns)</div>
+        <div class="card-body">
+            @if (_snapshot.ChainRuns.Count == 0)
+            {
+                <p class="insight-empty">Inga kedjekörningar i perioden.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Status</th><th>Start</th><th class="text-end">Tid</th><th>ChainRunId</th><th></th></tr></thead>
+                        <tbody>
+                            @foreach (var c in _snapshot.ChainRuns)
+                            {
+                                <tr>
+                                    <td>@(c.Status == InsightStatus.Warning ? "⏳ Pågår" : InsightFormat.StatusLabel(c.Status))</td>
+                                    <td class="small">@InsightFormat.Time(c.StartedAt, true)</td>
+                                    <td class="text-end small">@(c.Duration is { } d ? InsightFormat.Duration(d.TotalMilliseconds) : "–")</td>
+                                    <td class="small font-monospace text-truncate" style="max-width:220px">@c.ChainRunId</td>
+                                    <td class="text-end">
+                                        @if (c.TraceId is not null)
+                                        {
+                                            <a class="btn btn-outline-primary btn-sm" href="/processflow?traceId=@Uri.EscapeDataString(c.TraceId)">Trace</a>
+                                        }
+                                        else
+                                        {
+                                            <a class="btn btn-outline-secondary btn-sm" href="/processflow?correlationId=@Uri.EscapeDataString(c.CorrelationId)">Korrelation</a>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly (TimeSpan Window, string Label)[] WindowOptions =
+    [
+        (TimeSpan.FromHours(1), "1 h"),
+        (TimeSpan.FromHours(6), "6 h"),
+        (TimeSpan.FromHours(24), "24 h"),
+        (TimeSpan.FromDays(7), "7 d")
+    ];
+
+    private TimeSpan _window = TimeSpan.FromHours(1);
+    private InsightsSnapshot? _snapshot;
+    private string? _error;
+    private bool _isLoading;
+    private bool _isDisposed;
+    private System.Threading.Timer? _refreshTimer;
+
+    /// <summary>Loads the first snapshot and starts the periodic refresh.</summary>
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _refreshTimer = new System.Threading.Timer(_ => InvokeAsync(RefreshAsync), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    /// <summary>Switches time window and reloads immediately.</summary>
+    /// <param name="window">New window length.</param>
+    private async Task SelectWindowAsync(TimeSpan window)
+    {
+        _window = window;
+        await RefreshAsync();
+    }
+
+    /// <summary>Reloads the snapshot; keeps the previous one on failure so the page does not go blank.</summary>
+    private async Task RefreshAsync()
+    {
+        if (_isLoading || _isDisposed)
+        {
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            _snapshot = await InsightsQuery.GetSnapshotAsync(_window);
+            _error = null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not load insights");
+            _error = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+
+        if (!_isDisposed)
+        {
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>Stops the refresh timer.</summary>
+    public void Dispose()
+    {
+        _isDisposed = true;
+        _refreshTimer?.Dispose();
+    }
+}

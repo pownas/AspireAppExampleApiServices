@@ -12,7 +12,9 @@ public static class FlowRunStateCalculator
             .ToList();
 
         var totalSteps = runSteps.Count > 0 ? runSteps.Max(s => s.StepOrder) : 0;
-        var firstFailed = runSteps.FirstOrDefault(s => s.Status == FlowStepStatus.Failed);
+        // A run can fail (e.g. time out) without any step being marked Failed; it then stopped at the first unfinished step.
+        var firstFailed = runSteps.FirstOrDefault(s => s.Status == FlowStepStatus.Failed)
+            ?? (flowRun.Status == FlowRunStatus.Failed ? runSteps.FirstOrDefault(s => s.Status != FlowStepStatus.Completed) : null);
         var activeStep = runSteps.FirstOrDefault(s => s.Status is FlowStepStatus.Running or FlowStepStatus.Retrying);
         var lastSuccess = runSteps
             .Where(s => s.Status == FlowStepStatus.Completed)
@@ -40,7 +42,9 @@ public static class FlowRunStateCalculator
                         ? "Pågår"
                         : flowRun.Status == FlowRunStatus.Completed
                             ? "Klar"
-                            : "Okänd";
+                            : flowRun.Status == FlowRunStatus.Failed
+                                ? "Fel"
+                                : "Okänd";
 
         return new FlowRunStateModel
         {

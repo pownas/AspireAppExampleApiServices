@@ -54,3 +54,40 @@ h1:focus {
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
 }
+
+/* ── Insights: fixed status palette (never reused for series) ─────────────── */
+:root {
+    --insight-ok: #0ca30c;
+    --insight-warning: #fab219;
+    --insight-error: #d03b3b;
+    --insight-nodata: #e4e3de;
+    --insight-running: #2a78d6;
+    --insight-neutral: #2a78d6;
+    --insight-grid: #e9e8e4;
+    --insight-muted: #52514e;
+}
+
+.insight-ok { fill: var(--insight-ok); background-color: var(--insight-ok); }
+.insight-warning { fill: var(--insight-warning); background-color: var(--insight-warning); }
+.insight-error { fill: var(--insight-error); background-color: var(--insight-error); }
+.insight-nodata { fill: var(--insight-nodata); background-color: var(--insight-nodata); }
+.insight-running { fill: var(--insight-running); background-color: var(--insight-running); }
+
+.insight-svg { width: 100%; height: auto; display: block; }
+.insight-svg text { fill: var(--bs-body-color); font-size: 12px; }
+.insight-svg .muted { fill: var(--insight-muted); font-size: 11px; }
+.insight-svg .gridline { stroke: var(--insight-grid); stroke-width: 1; }
+.insight-svg .mark:hover { opacity: 0.8; }
+
+.insight-swatch {
+    display: inline-block;
+    width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 2px;
+    vertical-align: -0.1rem;
+    margin-right: 0.3rem;
+}
+
+.insight-legend { display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.8rem; color: var(--insight-muted); }
+.insight-empty { color: var(--insight-muted); font-size: 0.9rem; padding: 1rem 0; }
+.insight-minibar { height: 0.55rem; border-radius: 0 4px 4px 0; background-color: var(--insight-neutral); }
