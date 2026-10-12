@@ -32,7 +32,7 @@ public static class FlowRunStateCalculator
             ?? nextPendingStep?.ServiceName
             ?? runSteps.FirstOrDefault(s => s.StepOrder == currentStep)?.ServiceName;
 
-        var status = firstFailed is not null
+        var status = flowRun.Status == FlowRunStatus.Failed || firstFailed is not null
             ? "Fel"
             : activeStep is not null
                 ? "Pågår"
@@ -42,9 +42,7 @@ public static class FlowRunStateCalculator
                         ? "Pågår"
                         : flowRun.Status == FlowRunStatus.Completed
                             ? "Klar"
-                            : flowRun.Status == FlowRunStatus.Failed
-                                ? "Fel"
-                                : "Okänd";
+                            : "Okänd";
 
         return new FlowRunStateModel
         {

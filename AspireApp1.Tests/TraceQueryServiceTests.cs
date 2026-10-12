@@ -1,5 +1,6 @@
 using AspireApp1.StateStore;
 using AspireApp1.Web;
+using AspireApp1.Web.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -8,6 +9,22 @@ namespace AspireApp1.Tests;
 [TestClass]
 public class TraceQueryServiceTests
 {
+    [TestMethod]
+    public void HasSpans_ReturnsFalseForNullOrEmptyTrace()
+    {
+        Assert.IsFalse(TraceQueryService.HasSpans(null));
+        Assert.IsFalse(TraceQueryService.HasSpans(new TraceModel()));
+    }
+
+    [TestMethod]
+    public void HasSpans_ReturnsTrueForTraceWithSpans()
+    {
+        Assert.IsTrue(TraceQueryService.HasSpans(new TraceModel
+        {
+            Spans = [new() { SpanId = "span" }]
+        }));
+    }
+
     [TestMethod]
     public async Task GetByTraceIdAsync_WhenInputIsAspireTraceDetailUrl_FindsTrace()
     {
@@ -36,6 +53,65 @@ public class TraceQueryServiceTests
         Assert.IsNotNull(result);
         Assert.AreEqual(traceId, result.TraceId);
         Assert.AreEqual(1, result.Spans.Count);
+    }
+
+    [TestMethod]
+    public async Task GetByTraceIdWithFallbackAsync_WhenTraceIdMisses_FindsCorrelationIdTrace()
+    {
+        const string lookupId = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+        var factory = CreateFactory();
+
+        await using (var db = factory.CreateDbContext())
+        {
+            db.FlowRunRecords.Add(new FlowRunRecord
+            {
+                FlowRunId = "fallback-correlation",
+                FlowName = "CorrelationFallback",
+                CorrelationId = lookupId,
+                StartedAt = DateTimeOffset.UtcNow,
+                Status = FlowRunStatus.Completed
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var sut = new TraceQueryService(factory, NullLogger<TraceQueryService>.Instance);
+        var result = await sut.GetByTraceIdWithFallbackAsync(lookupId, lookupId, null);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("fallback-correlation", result.FlowRuns.Single().FlowRunId);
+        Assert.IsTrue(TraceQueryService.HasSpans(result));
+    }
+
+    [TestMethod]
+    public async Task GetByTraceIdWithFallbackAsync_WhenTraceAndCorrelationMiss_FindSpanIdTrace()
+    {
+        const string lookupId = "ffffffffffffffffffffffffffffffff";
+        const string fallbackTraceId = "abababababababababababababababab";
+        const string spanId = "3333333333333333";
+        var factory = CreateFactory();
+
+        await using (var db = factory.CreateDbContext())
+        {
+            db.SpanRecords.Add(new SpanRecord
+            {
+                TraceId = fallbackTraceId,
+                SpanId = spanId,
+                ServiceName = "AspireApp1.ApiService",
+                OperationName = "ApiService.Call",
+                StartTime = DateTimeOffset.UtcNow.AddSeconds(-1),
+                EndTime = DateTimeOffset.UtcNow,
+                Status = SpanRecordStatus.OK,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var sut = new TraceQueryService(factory, NullLogger<TraceQueryService>.Instance);
+        var result = await sut.GetByTraceIdWithFallbackAsync(lookupId, lookupId, spanId);
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual(fallbackTraceId, result.TraceId);
+        Assert.IsTrue(TraceQueryService.HasSpans(result));
     }
 
     [TestMethod]

@@ -400,23 +400,13 @@ else if (currentTrace is not null)
         {
             TraceModel? trace = activeSearchType switch
             {
-                "traceId" => await TraceQuery.GetByTraceIdAsync(normalizedInput, cancellationToken),
+                "traceId" => await TraceQuery.GetByTraceIdWithFallbackAsync(normalizedInput, normalizedInput, extractedSpanId, cancellationToken),
                 "correlationId" => await TraceQuery.GetByCorrelationIdAsync(normalizedInput, cancellationToken),
                 "spanId" => await TraceQuery.GetBySpanIdAsync(normalizedInput, cancellationToken),
                 _ => null
             };
 
-            if (trace is null && activeSearchType == "traceId")
-            {
-                trace = await TraceQuery.GetByCorrelationIdAsync(normalizedInput, cancellationToken);
-            }
-
-            if (trace is null && activeSearchType == "traceId" && extractedSpanId is not null)
-            {
-                trace = await TraceQuery.GetBySpanIdAsync(extractedSpanId, cancellationToken);
-            }
-
-            if (trace is null || trace.Spans.Count == 0)
+            if (!TraceQueryService.HasSpans(trace))
             {
                 if (!isAutoRefresh)
                 {
