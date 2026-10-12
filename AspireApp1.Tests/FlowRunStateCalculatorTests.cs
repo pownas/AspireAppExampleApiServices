@@ -32,4 +32,24 @@ public class FlowRunStateCalculatorTests
         Assert.AreEqual("ws3", state.CurrentService);
         StringAssert.Contains(state.ErrorMessage, "timeout");
     }
+
+    [TestMethod]
+    public void Build_FailedRunWithoutUnfinishedStep_ReportsError()
+    {
+        var run = new FlowRunRecord
+        {
+            FlowRunId = "run",
+            FlowName = "RetryDemoFlow",
+            CorrelationId = "c",
+            StartedAt = DateTimeOffset.UtcNow,
+            Status = FlowRunStatus.Failed
+        };
+        FlowStepRecord[] completedSteps =
+        [
+            new() { FlowRunId = "run", StepOrder = 1, StepName = "Step1", ServiceName = "ws1", Status = FlowStepStatus.Completed }
+        ];
+
+        Assert.AreEqual("Fel", FlowRunStateCalculator.Build(run, []).Status);
+        Assert.AreEqual("Fel", FlowRunStateCalculator.Build(run, completedSteps).Status);
+    }
 }

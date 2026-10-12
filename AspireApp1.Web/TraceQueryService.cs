@@ -24,6 +24,40 @@ public class TraceQueryService(IDbContextFactory<StateStoreDbContext> dbFactory,
         @"(?:^|/)traces/detail/([0-9a-fA-F]{32})(?:$|[/?#])",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    public static bool HasSpans(TraceModel? trace) => trace is { Spans.Count: > 0 };
+
+    /// <summary>
+    /// Retrieves a trace by trace ID, falling back to correlation ID and span ID when no spans are found.
+    /// </summary>
+    public async Task<TraceModel?> GetByTraceIdWithFallbackAsync(
+        string traceId,
+        string? correlationId,
+        string? spanId,
+        CancellationToken cancellationToken = default)
+    {
+        var trace = await GetByTraceIdAsync(traceId, cancellationToken);
+        if (HasSpans(trace))
+        {
+            return trace;
+        }
+
+        if (!string.IsNullOrWhiteSpace(correlationId))
+        {
+            trace = await GetByCorrelationIdAsync(correlationId, cancellationToken);
+            if (HasSpans(trace))
+            {
+                return trace;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(spanId))
+        {
+            trace = await GetBySpanIdAsync(spanId, cancellationToken);
+        }
+
+        return HasSpans(trace) ? trace : null;
+    }
+
     /// <summary>
     /// Retrieves a trace by its 32-character hex trace ID or a full W3C traceparent string.
     /// </summary>
