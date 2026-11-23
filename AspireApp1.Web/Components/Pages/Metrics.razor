@@ -1,0 +1,151 @@
+@page "/metrics"
+@rendermode InteractiveServer
+@attribute [Authorize(Policy = "MetricsViewer")]
+@implements IAsyncDisposable
+@using System.Globalization
+@inject GrafanaMetricsService MetricsService
+
+<PageTitle>Metrics</PageTitle>
+
+<h1>Applikationsmått</h1>
+<p class="lead text-muted">Aktuell trafik och svarstid från Grafana.</p>
+
+<div class="d-flex align-items-center gap-3 mb-3">
+    <button class="btn btn-primary" @onclick="RefreshAsync" disabled="@_loading">Uppdatera</button>
+    @if (_snapshot is not null)
+    {
+        <span class="text-muted">Uppdaterad @(_snapshot.RetrievedAt.ToLocalTime().ToString("HH:mm:ss"))</span>
+    }
+</div>
+
+@if (_loading && _snapshot is null)
+{
+    <p role="status">Hämtar mätdata …</p>
+}
+else if (_unavailable)
+{
+    <p class="alert alert-warning" role="status">Mätdata är tillfälligt otillgänglig. Försök igen senare.</p>
+}
+else if (_snapshot is not null)
+{
+    <div class="row g-4">
+        <div class="col-12">
+            <section class="card p-3" aria-label="HTTP-förfrågningar per sekund">
+                <h2 class="h5">HTTP-förfrågningar per sekund</h2>
+                <p class="text-muted">Rullande 5-minutershastighet, senaste timmen.</p>
+                @if (_snapshot.RequestRate.Count == 0)
+                {
+                    <p role="status">Inga mätvärden tillgängliga för intervallet.</p>
+                }
+                else
+                {
+                    <svg viewBox="0 0 600 180" role="img" aria-label="Graf över HTTP-förfrågningar per sekund">
+                        <polyline points="@GetPolylinePoints(_snapshot.RequestRate)" fill="none" stroke="#0d6efd" stroke-width="3" />
+                    </svg>
+                }
+            </section>
+        </div>
+        <div class="col-12">
+            <section class="card p-3" aria-label="95:e percentilen för HTTP-svarstid">
+                <h2 class="h5">HTTP-svarstid (p95)</h2>
+                <p class="text-muted">Rullande 5-minuterspercentil, millisekunder, senaste timmen.</p>
+                @if (_snapshot.P95Latency.Count == 0)
+                {
+                    <p role="status">Inga mätvärden tillgängliga för intervallet.</p>
+                }
+                else
+                {
+                    <svg viewBox="0 0 600 180" role="img" aria-label="Graf över 95:e percentilen för HTTP-svarstid">
+                        <polyline points="@GetPolylinePoints(_snapshot.P95Latency)" fill="none" stroke="#198754" stroke-width="3" />
+                    </svg>
+                }
+            </section>
+        </div>
+    </div>
+}
+
+@code {
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(1);
+    private readonly CancellationTokenSource _stop = new();
+    private GrafanaMetricsSnapshot? _snapshot;
+    private Task? _refreshTask;
+    private bool _loading = true;
+    private bool _unavailable;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _refreshTask = RefreshLoopAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        if (_loading && _snapshot is not null)
+        {
+            return;
+        }
+
+        _loading = true;
+        _unavailable = false;
+        try
+        {
+            _snapshot = await MetricsService.GetMetricsAsync(_stop.Token);
+        }
+        catch (GrafanaMetricsUnavailableException)
+        {
+            _unavailable = true;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task RefreshLoopAsync()
+    {
+        using var timer = new PeriodicTimer(RefreshInterval);
+        try
+        {
+            while (await timer.WaitForNextTickAsync(_stop.Token))
+            {
+                await InvokeAsync(async () =>
+                {
+                    await RefreshAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+        {
+        }
+    }
+
+    private static string GetPolylinePoints(IReadOnlyList<MetricPoint> points)
+    {
+        if (points.Count == 1)
+        {
+            return $"30,90";
+        }
+
+        var minimum = points.Min(point => point.Value);
+        var maximum = points.Max(point => point.Value);
+        var range = maximum - minimum;
+
+        return string.Join(' ', points.Select((point, index) =>
+        {
+            var x = 30 + index * 540d / (points.Count - 1);
+            var y = range == 0 ? 90 : 150 - ((point.Value - minimum) / range * 120);
+            return $"{x.ToString("0.##", CultureInfo.InvariantCulture)},{y.ToString("0.##", CultureInfo.InvariantCulture)}";
+        }));
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _stop.CancelAsync();
+        if (_refreshTask is not null)
+        {
+            await _refreshTask;
+        }
+        _stop.Dispose();
+    }
+}

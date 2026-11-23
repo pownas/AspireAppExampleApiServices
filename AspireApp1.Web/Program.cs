@@ -1,7 +1,11 @@
 ﻿using AspireApp1.StateStore;
 using AspireApp1.Web;
 using AspireApp1.Web.Components;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +15,64 @@ builder.AddServiceDefaults();
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+var oidcSection = builder.Configuration.GetSection("Authentication:OpenIdConnect");
+var oidcAuthority = oidcSection["Authority"];
+var oidcClientId = oidcSection["ClientId"];
+var oidcClientSecret = oidcSection["ClientSecret"];
+var hasOpenIdConnect = !string.IsNullOrWhiteSpace(oidcAuthority)
+    && !string.IsNullOrWhiteSpace(oidcClientId)
+    && !string.IsNullOrWhiteSpace(oidcClientSecret);
+
+builder.Services.AddCascadingAuthenticationState();
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.AccessDeniedPath = "/access-denied";
+        options.Events.OnRedirectToLogin = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return Task.CompletedTask;
+            }
+
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+        options.Events.OnRedirectToAccessDenied = context =>
+        {
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            }
+
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
+    });
+
+if (hasOpenIdConnect)
+{
+    builder.Services.AddAuthentication()
+        .AddOpenIdConnect("oidc", options =>
+        {
+            options.Authority = oidcAuthority;
+            options.ClientId = oidcClientId;
+            options.ClientSecret = oidcClientSecret;
+            options.ResponseType = "code";
+            options.SaveTokens = false;
+            options.TokenValidationParameters.NameClaimType = "name";
+            options.TokenValidationParameters.RoleClaimType = ClaimTypes.Role;
+            options.ClaimActions.MapJsonKey(ClaimTypes.Role, "role");
+        });
+}
+
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy("MetricsViewer", policy =>
+        policy.RequireAuthenticatedUser().RequireRole("Developer", "Administrator"));
 
 builder.Services.AddOutputCache();
 
@@ -36,6 +98,8 @@ builder.Services.AddScoped<FlowRestartService>();
 // InsightsQueryService aggregates recent state-store data for the /insights page.
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<AspireApp1.Web.Insights.InsightsQueryService>();
+builder.Services.AddHttpClient("grafana", client => client.Timeout = TimeSpan.FromSeconds(10));
+builder.Services.AddScoped<GrafanaMetricsService>();
 
 var app = builder.Build();
 
@@ -55,11 +119,52 @@ if (!app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.UseAntiforgery();
 
 app.UseOutputCache();
 
 app.MapStaticAssets();
+
+app.MapGet("/login", (IConfiguration configuration) =>
+{
+    var oidc = configuration.GetSection("Authentication:OpenIdConnect");
+    if (string.IsNullOrWhiteSpace(oidc["Authority"])
+        || string.IsNullOrWhiteSpace(oidc["ClientId"])
+        || string.IsNullOrWhiteSpace(oidc["ClientSecret"]))
+    {
+        return Results.Problem(
+            "Sign-in is not configured.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+
+    return Results.Challenge(
+        new AuthenticationProperties { RedirectUri = "/metrics" },
+        ["oidc"]);
+});
+
+app.MapGet("/access-denied", () =>
+    Results.Problem("You do not have permission to view this page.", statusCode: StatusCodes.Status403Forbidden));
+
+app.MapGet("/api/metrics", async (
+    GrafanaMetricsService metricsService,
+    ILogger<Program> logger,
+    CancellationToken ct) =>
+{
+    try
+    {
+        return Results.Ok(await metricsService.GetMetricsAsync(ct));
+    }
+    catch (GrafanaMetricsUnavailableException)
+    {
+        logger.LogWarning("Grafana metrics are temporarily unavailable.");
+        return Results.Problem(
+            "Metrics are temporarily unavailable.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+}).RequireAuthorization("MetricsViewer");
 
 // Proxy API endpoints — serve trace data from the state store.
 app.MapGet("/api/traces/{traceId}", async (string traceId, TraceQueryService queryService, CancellationToken ct) =>
@@ -244,3 +349,5 @@ app.MapRazorComponents<App>()
 app.MapDefaultEndpoints();
 
 app.Run();
+
+public partial class Program { }

@@ -124,6 +124,30 @@ var webFrontend = builder.AddProject<Projects.AspireApp1_Web>("webfrontend")
     .WithEnvironment("ConnectionStrings__statestore", sqliteConnStr)
     .WithEnvironment("ConnectionStrings__statestoreSqlServer", sqlServerConnStr);
 
+var metricsOtlpEndpoint = builder.Configuration["Metrics:OtlpEndpoint"];
+if (!string.IsNullOrWhiteSpace(metricsOtlpEndpoint))
+{
+    IResourceBuilder<ProjectResource>[] telemetryServices =
+    [
+        apiService,
+        apiErrorService,
+        apiServiceForecast,
+        apiServiceExternal,
+        apiServiceStaticWeather,
+        apiServicePerson,
+        workerService1,
+        workerService2,
+        workerService3,
+        workerService4,
+        webFrontend
+    ];
+
+    foreach (var service in telemetryServices)
+    {
+        service.WithEnvironment("Metrics__OtlpEndpoint", metricsOtlpEndpoint);
+    }
+}
+
 // The web frontend triggers flows via WorkerService1
 webFrontend.WithReference(workerService1);
 workerService4.WithReference(webFrontend).WaitFor(webFrontend);

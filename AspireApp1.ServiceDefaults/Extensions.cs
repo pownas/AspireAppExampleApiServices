@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.Globalization;
 using Microsoft.Extensions.Configuration;
 using OpenTelemetry;
+using OpenTelemetry.Exporter;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Trace;
 
@@ -80,6 +81,16 @@ public static class Extensions
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation();
+
+                var metricsOtlpEndpoint = builder.Configuration["Metrics:OtlpEndpoint"];
+                if (!string.IsNullOrWhiteSpace(metricsOtlpEndpoint))
+                {
+                    metrics.AddOtlpExporter(options =>
+                    {
+                        options.Endpoint = new Uri($"{metricsOtlpEndpoint.TrimEnd('/')}/v1/metrics");
+                        options.Protocol = OtlpExportProtocol.HttpProtobuf;
+                    });
+                }
             })
             .WithTracing(tracing =>
             {
