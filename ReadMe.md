@@ -116,6 +116,31 @@ För en samlad helhetsbeskrivning av hur alla tjänster, flöden, spårning och 
 5. Processflöde visar stegindikering i formatet **Steg X/N** samt markerar var flödet fastnat med tjänst och felorsak.
 6. Kontrollera worker-loggar för samma `trace_id` och separat `correlation_id` vid async-jobb/retry/finalt fel. För en fristående lokal demo, välj `StateStore:Provider=Sqlite` i AppHost och starta `/flowdemo`; jämför `trace_id` i Aspire Dashboard och `/processflow`. Välj en körning på `/flowruns` för att se steg, varaktighet och felpunkt.
 
+### Graf- och mätdata via Collector och Grafana
+
+Webbappen samlar in standardmåtten för ASP.NET Core, HTTP-klienter och .NET-runtime via OpenTelemetry. Aspire Dashboard fortsätter ta emot den befintliga OTLP-telemetrin. När `Metrics:OtlpEndpoint` anges exporteras dessutom endast metrics till en separat OpenTelemetry Collector, som exponerar dem för Prometheus; Grafana använder den provisionerade Prometheus-datakällan. Starta den lokala stacken från repository-roten:
+
+```bash
+GRAFANA_ADMIN_PASSWORD='välj-ett-lokalt-lösenord' docker compose -f telemetry/docker-compose.yml up -d
+dotnet user-secrets --project AspireApp1.AppHost set 'Metrics:OtlpEndpoint' 'http://localhost:4318'
+dotnet user-secrets --project AspireApp1.Web set 'Grafana:Endpoint' 'http://localhost:3000'
+dotnet user-secrets --project AspireApp1.Web set 'Grafana:ApiToken' '<Grafana service-account token>'
+dotnet user-secrets --project AspireApp1.Web set 'Authentication:OpenIdConnect:Authority' '<OIDC issuer URL>'
+dotnet user-secrets --project AspireApp1.Web set 'Authentication:OpenIdConnect:ClientId' '<OIDC client ID>'
+dotnet user-secrets --project AspireApp1.Web set 'Authentication:OpenIdConnect:ClientSecret' '<OIDC client secret>'
+```
+
+Skapa en Grafana service account med endast `Viewer`-behörighet, skapa en token och lagra den som lokal user secret. Webbappen använder token endast server-side mot Grafana Query API; token och Grafana-adressen returneras aldrig till klienten. Collector tar emot OTLP/HTTP på loopback-port 4318; Prometheus och Grafana-datakällan är inte exponerade på värdportar. Grafana UI är endast bunden till `127.0.0.1:3000`. Stäng stacken med `docker compose -f telemetry/docker-compose.yml down`; `-v` tar även bort lokalt lagrad metricsdata.
+
+Sidan `/metrics` visar två Grafana/Prometheus-frågor över senaste timmen, uppdaterade varje minut:
+
+| Graf | PromQL | Datatolkning |
+|---|---|---|
+| HTTP-förfrågningar per sekund | `sum(rate(http_server_request_duration_seconds_count[5m]))` | Alla instrumenterade tjänsters HTTP-anrop, rullande femminutershastighet. |
+| HTTP-svarstid p95 | `histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket[5m])))` | 95:e percentilen av HTTP-svarstid, rullande femminutersintervall. |
+
+Åtkomst styrs med OIDC-konfiguration i `Authentication:OpenIdConnect` (Authority, ClientId, ClientSecret). Identity Provider måste utfärda en `role`-claim med värdet `Developer` eller `Administrator`; båda rollerna krävs för `/metrics` och `/api/metrics`. Saknad OIDC-konfiguration innebär att inloggning inte kan startas, och server-API:t returnerar 401 för oautentiserade respektive 403 för fel roll. Grafana-fel och saknade konfigurationsvärden returnerar ett generiskt 503, utan interna detaljer. För lokal OIDC-provider sätts motsvarande värden som Web-projektets user secrets.
+
 ## Frontend-visualisering av processflöde
 
 För krav, specifikation och implementationsplan gällande frontend-visualisering av processflöde via `traceId`/`correlationId`, se:
